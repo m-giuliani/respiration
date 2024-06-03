@@ -7,7 +7,7 @@ import torch.optim as optim
 import yaml
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 import os
 from pathlib import Path
 from tqdm import tqdm
@@ -22,7 +22,7 @@ torch.manual_seed(42)
 
 current_time = datetime.now().strftime("%b%d_%H-%M-%S")
 log_dir = os.path.join("runs", current_time)
-writer = SummaryWriter(f'runs/lstm_experiments/{current_time}')
+writer = SummaryWriter(f'runs/lstm_experiments_h/{current_time}')
 
 device = "cpu"
 if torch.cuda.is_available():
@@ -58,15 +58,17 @@ def training_loop(model, dataloader, loss_function, optimizer, epoch):
     # Calculate precision and recall
     precision = precision_score(all_labels, all_preds, average='macro')
     recall = recall_score(all_labels, all_preds, average='macro')
+    f1 = f1_score(all_labels, all_preds, average='macro')
 
     # Log metrics to TensorBoard
     writer.add_scalar('Loss/train', running_loss / len(dataloader), epoch)
     writer.add_scalar('Precision/train', precision, epoch)
     writer.add_scalar('Recall/train', recall, epoch)
-    return running_loss / len(dataloader), precision, recall
+    writer.add_scalar('F1/train', f1, epoch)
+    return running_loss / len(dataloader), f1, precision, recall
 
 
-def validation_loop(model, dataloader, epoch):
+def validation_loop(model, dataloader, loss_function, epoch):
     running_loss = 0.0
     all_labels = []
     all_preds = []
@@ -88,36 +90,48 @@ def validation_loop(model, dataloader, epoch):
         # Calculate precision and recall
         precision = precision_score(all_labels, all_preds, average='macro')
         recall = recall_score(all_labels, all_preds, average='macro')
+        f1 = f1_score(all_labels, all_preds, average='macro')
 
         # Log metrics to TensorBoard
         writer.add_scalar('Loss/valid', running_loss / len(dataloader), epoch)
         writer.add_scalar('Precision/valid', precision, epoch)
         writer.add_scalar('Recall/valid', recall, epoch)
-    return running_loss / len(dataloader), precision, recall
+        writer.add_scalar('F1/valid', f1, epoch)
+    return running_loss / len(dataloader), f1, precision, recall
 
 
-@hydra.main(config_path="runs/hyperparams", config_name="config")
+@hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
 def main(cfg: DictConfig):
     # will-be hyperparameters
     all_columns = ['t', 'Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load',
                    'label_at', 'label_rc']
-    config_file_path = "runs/hyperparams/config.yaml"
-    
-    with open(config_file_path) as f:
-        config = yaml.safe_load(f)
-    lr = config['lr']
-    num_epochs = int(config['epochs'])
-    # window_size = ['']
     columns = ['Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load']
-    hidden_size = int(config['hidden_size'])
-    num_layers = int(config['num_layers'])
-    dataset_path = Path(ROOT_DIR) / 'data/sequence_dataset.pkl'
+    working_dir = os.getcwd()
+    orig_cwd = hydra.utils.get_original_cwd()
+    # config_file_path = "runs/hyperparams/config.yaml"
+    #
+    # with open(config_file_path) as f:
+    #     config = yaml.safe_load(f)
+
+    lr = cfg.optimizer.lr
+    num_epochs = int(cfg.epochs)
+    # window_size = ['']
+    hidden_size = int(cfg.model.hidden_size)
+    num_layers = int(cfg.model.num_layers)
+    dataset_path = Path(cfg.data_dir) / cfg.dataset.path
     total_dataset = TimeSeriesDataset(dataset_path, columns=columns)
 
     model = ThresholdEstimator(len(total_dataset.features), hidden_size, num_layers).to(device)
     loss_function = nn.CrossEntropyLoss(ignore_index=-1)
-    # optimizer = optim.SGD(model.parameters(), lr=lr)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    if cfg.optimizer.name == 'adam':
+        betas = cfg.optimizer.betas
+        wd = cfg.optimizer.weight_decay
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    elif cfg.optimizer.name == 'sgd':
+        m = cfg.optimizer.momentum
+        n = cfg.optimizer.nesterov
+        wd = cfg.optimizer.weight_decay
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=m, weight_decay=wd, nesterov=n)
 
     index_tr, index_te = train_test_split(range(len(total_dataset)), random_state=42)
     train_dataset = TimeSeriesDataset(dataset_path, index_tr, columns=columns)
@@ -126,10 +140,12 @@ def main(cfg: DictConfig):
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
     for e in tqdm(range(num_epochs)):
-        tr_loss, tr_precision, tr_recall = training_loop(model, train_dataloader, loss_function, optimizer, e)
-        val_loss, val_precision, val_recall = validation_loop(model, test_dataloader, e)
-    writer.add_hparams(config, {'tr_loss': tr_loss, 'val_loss': val_loss, 'tr_precision': tr_precision,
-                                'val_precision': val_precision, 'tr_recall': tr_recall, 'val_recall': val_recall})
+        tr_loss, tr_f1, tr_precision, tr_recall = training_loop(model, train_dataloader, loss_function, optimizer, e)
+        val_loss, val_f1, val_precision, val_recall = validation_loop(model, test_dataloader, loss_function, e)
+    writer.add_hparams(cfg.__dict__, {'tr_loss': tr_loss, 'val_loss': val_loss,
+                             'tr_f1': tr_f1, 'val_f1': val_f1,
+                             'tr_precision': tr_precision, 'val_precision': val_precision,
+                             'tr_recall': tr_recall, 'val_recall': val_recall})
     writer.close()
 
 

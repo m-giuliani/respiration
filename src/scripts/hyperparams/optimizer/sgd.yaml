@@ -1,0 +1,5 @@
+name: sgd
+lr: 1.0e-2
+momentum: 0.85
+nesterov: False
+weight_decay: 0

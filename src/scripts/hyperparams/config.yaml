@@ -1,0 +1,10 @@
+defaults:
+  - dataset: file_cpet
+  - optimizer: adam
+  - model: tenet_lstm
+  - _self_
+
+working_dir: ${hydra:runtime.cwd}
+data_dir: ${working_dir}/data/
+batch_size: 10
+epochs: 150

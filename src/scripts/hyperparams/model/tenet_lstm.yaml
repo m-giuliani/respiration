@@ -1,0 +1,3 @@
+name: tenet_lstm
+hidden_size: 100
+num_layers: 2

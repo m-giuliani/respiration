@@ -135,3 +135,6 @@ CATKIN_IGNORE
 # CMake
 cmake-build-*/
 
+# BINARIES
+.pkl
+
