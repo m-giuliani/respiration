@@ -112,7 +112,8 @@ def main(cfg: DictConfig):
     #
     # with open(config_file_path) as f:
     #     config = yaml.safe_load(f)
-
+    # hp_cfg = {**cfg.__dict__['_content']['optimizer'], **cfg.__dict__['_content']['model'],
+    #           **{v for (v, k) in cfg.__dict__['_content'].items() if not isinstance(v, dict)}}
     lr = cfg.optimizer.lr
     num_epochs = int(cfg.epochs)
     # window_size = ['']
@@ -142,7 +143,9 @@ def main(cfg: DictConfig):
     for e in tqdm(range(num_epochs)):
         tr_loss, tr_f1, tr_precision, tr_recall = training_loop(model, train_dataloader, loss_function, optimizer, e)
         val_loss, val_f1, val_precision, val_recall = validation_loop(model, test_dataloader, loss_function, e)
-    writer.add_hparams(cfg.__dict__, {'tr_loss': tr_loss, 'val_loss': val_loss,
+
+    hyp_cfg = {**{k:v for (k,v) in cfg.items() if not isinstance(v, DictConfig)}, **cfg.model, **cfg.dataset, **cfg.optimizer}
+    writer.add_hparams(hyp_cfg, {'tr_loss': tr_loss, 'val_loss': val_loss,
                              'tr_f1': tr_f1, 'val_f1': val_f1,
                              'tr_precision': tr_precision, 'val_precision': val_precision,
                              'tr_recall': tr_recall, 'val_recall': val_recall})
