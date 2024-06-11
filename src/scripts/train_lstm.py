@@ -28,7 +28,6 @@ device = "cpu"
 if torch.cuda.is_available():
     device = "cuda"
 
-
 def training_loop(model, dataloader, loss_function, optimizer, epoch):
     running_loss = 0.0
     all_labels = []
@@ -108,12 +107,6 @@ def main(cfg: DictConfig):
     columns = ['Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load']
     working_dir = os.getcwd()
     orig_cwd = hydra.utils.get_original_cwd()
-    # config_file_path = "runs/hyperparams/config.yaml"
-    #
-    # with open(config_file_path) as f:
-    #     config = yaml.safe_load(f)
-    # hp_cfg = {**cfg.__dict__['_content']['optimizer'], **cfg.__dict__['_content']['model'],
-    #           **{v for (v, k) in cfg.__dict__['_content'].items() if not isinstance(v, dict)}}
     lr = cfg.optimizer.lr
     num_epochs = int(cfg.epochs)
     # window_size = ['']
