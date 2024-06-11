@@ -1,0 +1,10 @@
+name: columns_all
+columns:
+  - Rf
+  - VO2
+  - VCO2
+  - VE/VO2
+  - VE/VCO2
+  - HR
+  - VO2/HR
+  - Load

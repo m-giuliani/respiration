@@ -1,5 +1,6 @@
 defaults:
   - dataset: file_cpet
+  - features: columns_all
   - optimizer: adam
   - model: tenet_lstm
   - _self_

@@ -104,7 +104,9 @@ def main(cfg: DictConfig):
     # will-be hyperparameters
     all_columns = ['t', 'Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load',
                    'label_at', 'label_rc']
-    columns = ['Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load']
+    # columns = ['Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load']
+    columns = cfg.features.columns
+    all_columns = columns + cfg.dataset.labels
     working_dir = os.getcwd()
     orig_cwd = hydra.utils.get_original_cwd()
     lr = cfg.optimizer.lr
@@ -137,7 +139,7 @@ def main(cfg: DictConfig):
         tr_loss, tr_f1, tr_precision, tr_recall = training_loop(model, train_dataloader, loss_function, optimizer, e)
         val_loss, val_f1, val_precision, val_recall = validation_loop(model, test_dataloader, loss_function, e)
 
-    hyp_cfg = {**{k:v for (k,v) in cfg.items() if not isinstance(v, DictConfig)}, **cfg.model, **cfg.dataset, **cfg.optimizer}
+    hyp_cfg = {**{k:v for (k,v) in cfg.items() if isinstance(v, (int, float, str, bool, torch.Tensor))}, **cfg.model, **cfg.optimizer}
     writer.add_hparams(hyp_cfg, {'tr_loss': tr_loss, 'val_loss': val_loss,
                              'tr_f1': tr_f1, 'val_f1': val_f1,
                              'tr_precision': tr_precision, 'val_precision': val_precision,
