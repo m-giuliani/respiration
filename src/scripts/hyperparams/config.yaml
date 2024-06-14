@@ -1,11 +1,11 @@
 defaults:
   - dataset: file_cpet
-  - features: columns_all
+  - features: columns_breath
   - optimizer: adam
   - model: tenet_lstm
   - _self_
 
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${working_dir}/data/
-batch_size: 10
-epochs: 150
+batch_size: 20
+epochs: 2
