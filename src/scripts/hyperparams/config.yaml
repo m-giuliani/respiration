@@ -7,5 +7,27 @@ defaults:
 
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${working_dir}/data/
-batch_size: 20
-epochs: 2
+batch_size: 8
+
+# Impostazioni per il tuning
+epochs_tuning: 5
+# Impostazioni per l'addestramento finale
+epochs_final: 20
+
+  
+model:
+  hidden_size: 454  # Migliore valore trovato
+  num_layers: 2  # Migliore valore trovato
+  dropout: 0.29703774097264446  # Migliore valore trovato
+
+# Ottimizzatore
+optimizer:
+  name: adam  # Migliore ottimizzatore trovato
+  lr: 0.0023616905639792267  # Migliore valore trovato
+  weight_decay: 0.0006614343893705291  # Migliore valore trovato
+
+feature_groups:
+  respiratory: ['Rf', 'VE/VO2', 'VE/VCO2']
+  cardiac: ['HR', 'VO2/HR']
+  metabolic: ['VO2', 'VCO2']
+  load: ['Load'] 

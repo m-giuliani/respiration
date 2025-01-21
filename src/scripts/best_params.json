@@ -1,0 +1,10 @@
+{
+    "hidden_size": 454,
+    "num_layers": 2,
+    "lr": 0.0023616905639792267,
+    "batch_size": 8,
+    "optimizer": "adam",
+    "dropout": 0.29703774097264446,
+    "weight_decay": 0.0006614343893705291,
+    "best_f1": 0.566717652330674
+}

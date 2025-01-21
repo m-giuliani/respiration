@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+import sys
+sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
 from config.definitions import ROOT_DIR
 from datetime import datetime
 
@@ -39,9 +41,8 @@ def training_loop(model, dataloader, loss_function, optimizer, epoch):
         targets.to(device)
         preds = model(data, lengths)
 
-        # Flatten the output and labels to match the expected input of CrossEntropyLoss
-        preds = preds.view(-1, 3).cuda()
-        targets = targets.view(-1).cuda()
+        preds = preds.view(-1, 3).to(device)
+        targets = targets.view(-1).to(device)
         loss = loss_function(preds, targets)
         loss.backward()
         optimizer.step()
@@ -54,12 +55,10 @@ def training_loop(model, dataloader, loss_function, optimizer, epoch):
         _, predicted = torch.max(preds.data, 1)
         all_preds.extend(predicted[mask].cpu().numpy())
 
-    # Calculate precision and recall
     precision = precision_score(all_labels, all_preds, average='macro')
     recall = recall_score(all_labels, all_preds, average='macro')
     f1 = f1_score(all_labels, all_preds, average='macro')
 
-    # Log metrics to TensorBoard
     writer.add_scalar('Loss/train', running_loss / len(dataloader), epoch)
     writer.add_scalar('Precision/train', precision, epoch)
     writer.add_scalar('Recall/train', recall, epoch)
@@ -86,12 +85,10 @@ def validation_loop(model, dataloader, loss_function, epoch):
             _, predicted = torch.max(preds.data, 1)
             all_preds.extend(predicted[mask].cpu().numpy())
 
-        # Calculate precision and recall
         precision = precision_score(all_labels, all_preds, average='macro')
         recall = recall_score(all_labels, all_preds, average='macro')
         f1 = f1_score(all_labels, all_preds, average='macro')
 
-        # Log metrics to TensorBoard
         writer.add_scalar('Loss/valid', running_loss / len(dataloader), epoch)
         writer.add_scalar('Precision/valid', precision, epoch)
         writer.add_scalar('Recall/valid', recall, epoch)
@@ -101,43 +98,71 @@ def validation_loop(model, dataloader, loss_function, epoch):
 
 @hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
 def main(cfg: DictConfig):
-    # will-be hyperparameters
+
+    print("\n\n\n",cfg,"\n\n\n")
+
     all_columns = ['t', 'Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load',
                    'label_at', 'label_rc']
     # columns = ['Rf', 'VO2', 'VCO2', 'VE/VO2', 'VE/VCO2', 'HR', 'VO2/HR', 'Load']
     columns = cfg.features.columns
+
+    #columns = [col for col in cfg.features.columns if col != 'Load']
+
     all_columns = columns + cfg.dataset.labels
     working_dir = os.getcwd()
     orig_cwd = hydra.utils.get_original_cwd()
     lr = cfg.optimizer.lr
-    num_epochs = int(cfg.epochs)
+    num_epochs = int(cfg.epochs_final)
     # window_size = ['']
     hidden_size = int(cfg.model.hidden_size)
     num_layers = int(cfg.model.num_layers)
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
     total_dataset = TimeSeriesDataset(dataset_path, columns=columns)
 
-    model = ThresholdEstimator(len(total_dataset.features), hidden_size, num_layers).to(device)
+    model = ThresholdEstimator(len(total_dataset.features), hidden_size, num_layers, dropout=cfg.model.dropout).to(device)
     loss_function = nn.CrossEntropyLoss(ignore_index=-1)
     if cfg.optimizer.name == 'adam':
         betas = cfg.optimizer.betas
         wd = cfg.optimizer.weight_decay
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif cfg.optimizer.name == 'sgd':
-        m = cfg.optimizer.momentum
-        n = cfg.optimizer.nesterov
+        m = 0.9
+        n = True
         wd = cfg.optimizer.weight_decay
-        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=m, weight_decay=wd, nesterov=n)
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=m, weight_decay=wd, nesterov=True)
 
     index_tr, index_te = train_test_split(range(len(total_dataset)), random_state=42)
     train_dataset = TimeSeriesDataset(dataset_path, index_tr, columns=columns)
     test_dataset = TimeSeriesDataset(dataset_path, index_te, columns=columns)
-    train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
-    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=collate_fn)
+    test_dataloader = DataLoader(test_dataset, batch_size=cfg.batch_size, shuffle=False, collate_fn=collate_fn)
+
+
+     # Configurazion dell'early stopping
+    patience = 5  
+    min_delta = 0.001  
+    best_val_loss = float("inf")
+    best_model_state = None
+    early_stop_counter = 0
 
     for e in tqdm(range(num_epochs)):
         tr_loss, tr_f1, tr_precision, tr_recall = training_loop(model, train_dataloader, loss_function, optimizer, e)
         val_loss, val_f1, val_precision, val_recall = validation_loop(model, test_dataloader, loss_function, e)
+    
+        if best_val_loss - val_loss > min_delta:
+            best_val_loss = val_loss
+            best_model_state = model.state_dict() 
+            early_stop_counter = 0 
+            print(f"Epoch {e}: Validation loss improved to {val_loss:.4f}. Counter reset.")
+        else:
+            early_stop_counter += 1  
+            print(f"Epoch {e}: No improvement in validation loss. Counter: {early_stop_counter}/{patience}")
+        
+        
+        if early_stop_counter >= patience:
+            print(f"Early stopping at epoch {e}. Best validation loss: {best_val_loss:.4f}")
+            model.load_state_dict(best_model_state)  
+            break
 
     hyp_cfg = {**{k:v for (k,v) in cfg.items() if isinstance(v, (int, float, str, bool, torch.Tensor))}, **cfg.model, **cfg.optimizer}
     writer.add_hparams(hyp_cfg, {'tr_loss': tr_loss, 'val_loss': val_loss,

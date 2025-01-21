@@ -12,7 +12,7 @@ class ThresholdEstimator(nn.Module):
 
     def forward(self, input, lengths):
         packed_sequence = pack_padded_sequence(input, lengths, batch_first=True, enforce_sorted=False)
-        packed_outputs, _ = self.lstm(packed_sequence.cuda())
-        padded_outs, _ = pad_packed_sequence(packed_outputs.cuda(), batch_first=True)
-        out = self.hidden2estimate(padded_outs.cuda())
+        packed_outputs, _ = self.lstm(packed_sequence)
+        padded_outs, _ = pad_packed_sequence(packed_outputs, batch_first=True)
+        out = self.hidden2estimate(padded_outs)
         return out

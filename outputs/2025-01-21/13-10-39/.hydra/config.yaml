@@ -1,0 +1,39 @@
+dataset:
+  name: file_cpet_00
+  path: sequence_dataset.pkl
+  labels:
+  - label_at
+  - label_rc
+features:
+  name: columns_breath
+  columns:
+  - Rf
+  - HR
+optimizer:
+  name: adam
+  lr: 0.0023616905639792267
+  betas: (0.9, 0.999)
+  weight_decay: 0.0006614343893705291
+model:
+  name: tenet_lstm
+  hidden_size: 454
+  num_layers: 2
+  dropout: 0.29703774097264446
+working_dir: ${hydra:runtime.cwd}
+data_dir: ${working_dir}/data/
+batch_size: 8
+epochs_tuning: 5
+epochs_final: 20
+feature_groups:
+  respiratory:
+  - Rf
+  - VE/VO2
+  - VE/VCO2
+  cardiac:
+  - HR
+  - VO2/HR
+  metabolic:
+  - VO2
+  - VCO2
+  load:
+  - Load

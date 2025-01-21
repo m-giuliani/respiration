@@ -1,0 +1,23 @@
+{
+    "f1_scores": {
+        "respiratory": 0.575290365163783,
+        "cardiac": 0.5293898816728778,
+        "metabolic": 0.5640350865632183,
+        "load": 0.5139174191374148,
+        "respiratory_cardiac": 0.5408394700761847,
+        "respiratory_metabolic": 0.662593003312836,
+        "respiratory_load": 0.6174317541983597,
+        "cardiac_metabolic": 0.6112640846837505,
+        "cardiac_load": 0.5482480993542328,
+        "metabolic_load": 0.669586871543962,
+        "respiratory_cardiac_metabolic": 0.6527164615387014,
+        "respiratory_cardiac_load": 0.6059072203397187,
+        "respiratory_metabolic_load": 0.6642416596000528,
+        "cardiac_metabolic_load": 0.5791716539106088,
+        "respiratory_cardiac_metabolic_load": 0.7427697247546751
+    },
+    "best_group": {
+        "name": "respiratory_cardiac_metabolic_load",
+        "f1": 0.7427697247546751
+    }
+}
