@@ -30,16 +30,16 @@ def objective(trial, cfg, dataset_path, columns, folds, device):
     # su un fold solo non deve vincere per fortuna.
 
     # Definiamo lo spazio di ricerca per gli iperparametri
-    hidden_size = trial.suggest_int("hidden_size", 32, 512)
-    num_layers = trial.suggest_int("num_layers", 1, 4)
-    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
+    hidden_size = trial.suggest_int("hidden_size", cfg.search.hidden_min, cfg.search.hidden_max)
+    num_layers = trial.suggest_int("num_layers", cfg.search.layers_min, cfg.search.layers_max)
+    lr = trial.suggest_float("lr", cfg.search.lr_min, cfg.search.lr_max, log=True)
+    batch_size = trial.suggest_categorical("batch_size", list(cfg.search.batch_sizes))
 
     # Tipo di ottimizzatore da utilizzare
     optimizer_name = trial.suggest_categorical("optimizer", ["adam", "sgd"])
 
     dropout = trial.suggest_float("dropout", 0, 0.5) if num_layers > 1 else 0.0
-    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+    weight_decay = trial.suggest_float("weight_decay", cfg.search.wd_min, cfg.search.wd_max, log=True)
 
     def build_model():
         return ThresholdEstimator(input_size=len(columns), hidden_size=hidden_size,
@@ -120,7 +120,9 @@ def main(cfg: DictConfig):
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=cfg.split.seed),
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1),
+        # n_startup_trials basso: con 5 i primi cinque trial pagavano tutti i
+        # fold senza poter essere potati, ed era la parte piu' costosa della run.
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=2, n_warmup_steps=1),
     )
     study.optimize(lambda trial: objective(trial, cfg, dataset_path, columns, folds, device),
                    n_trials=cfg.n_trials, callbacks=[logging_callback])

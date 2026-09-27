@@ -42,3 +42,16 @@ feature_groups:
   cardiac: ['HR', 'VO2/HR']
   metabolic: ['VO2', 'VCO2']
   load: ['Load']
+
+# Spazio di ricerca di Optuna. I limiti superiori tengono le attivazioni del
+# backward in RAM: sequenze fino a 1090 passi, oltre si va in swap.
+search:
+  hidden_min: 32
+  hidden_max: 256
+  layers_min: 1
+  layers_max: 3
+  batch_sizes: [8, 16, 32]
+  lr_min: 1.0e-5
+  lr_max: 1.0e-2
+  wd_min: 1.0e-6
+  wd_max: 1.0e-2

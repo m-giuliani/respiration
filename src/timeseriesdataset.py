@@ -51,6 +51,10 @@ class TimeSeriesDataset(Dataset):
     def file_name(self, id):
         return self.df_idx[id]
 
+    def sequence_lengths(self):
+        """Lunghezza di ogni sequenza, senza costruire i tensori."""
+        return [len(self.df_map[name]) for name in self.df_idx]
+
 
 def collate_fn(batch):
     sequences, labels = zip(*batch)

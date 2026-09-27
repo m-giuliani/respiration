@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.metrics import precision_score, recall_score, f1_score
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler
 from tqdm import tqdm
 
 from src.timeseriesdataset import TimeSeriesDataset, collate_fn
@@ -109,9 +109,39 @@ def build_optimizer(cfg, model):
     raise ValueError(f"Optimizer non riconosciuto: {cfg.optimizer.name}")
 
 
-def make_dataloader(dataset_path, index, columns, batch_size, shuffle):
+class LengthBucketBatchSampler(Sampler):
+    """Mette nello stesso batch le sequenze di lunghezza simile.
+
+    I test durano da 80 a 1090 passi. Con i batch formati a caso ognuno viene
+    paddato alla sequenza piu' lunga che ci capita dentro, quindi buona parte
+    del calcolo finisce sul padding, che la loss poi ignora. Ordinando per
+    lunghezza il padding dentro ogni batch e' minimo; la casualita' resta
+    nell'ordine in cui i batch vengono presentati.
+    """
+
+    def __init__(self, lengths, batch_size, shuffle=True):
+        self.lengths = list(lengths)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __iter__(self):
+        order = sorted(range(len(self.lengths)), key=lambda i: self.lengths[i])
+        batches = [order[i:i + self.batch_size]
+                   for i in range(0, len(order), self.batch_size)]
+        if self.shuffle:
+            batches = [batches[i] for i in torch.randperm(len(batches)).tolist()]
+        return iter(batches)
+
+    def __len__(self):
+        return (len(self.lengths) + self.batch_size - 1) // self.batch_size
+
+
+def make_dataloader(dataset_path, index, columns, batch_size, shuffle, bucket=True):
     dataset = TimeSeriesDataset(dataset_path, index, columns=columns)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+    if not bucket:
+        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+    sampler = LengthBucketBatchSampler(dataset.sequence_lengths(), batch_size, shuffle=shuffle)
+    return DataLoader(dataset, batch_sampler=sampler, collate_fn=collate_fn)
 
 
 def cross_validate(dataset_path, columns, folds, build_model, make_optimizer,
