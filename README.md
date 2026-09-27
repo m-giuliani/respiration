@@ -344,7 +344,7 @@ is kept out of every selection step and read once.
 ## Limits, i.e. what these numbers do not show
 
 - **No comparison against the clinical method.** The real question is not
-  whether per-breath F1 is 0.73, it is whether this model lands closer to the
+  whether per-breath F1 is 0.83, it is whether this model lands closer to the
   thresholds than the V-slope and the ventilatory equivalents used today.
   Without that comparison there is no way to know whether 0.73 is a good result.
 - **The metric is a surrogate.** Nobody cares about classifying individual
@@ -413,7 +413,7 @@ into padding, now 18%.
 - **measure the threshold error** in seconds or watts, not just per-breath F1:
   it is the metric that makes this work legible to a physician
 - **compare against the clinical method** (V-slope), otherwise there is no
-  telling whether 0.73 is a good number
+  telling whether 0.83 is a good number
 - `data/` holds 8 xlsx outside `File_CPET/`, three of which (`Id_10`, `Id_58`,
   `Id_70`) are not in the dataset: it is not documented why
 - `PROJECT_ROOT` in `paths.py` assumes an editable install, which is how the
