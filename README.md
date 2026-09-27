@@ -142,7 +142,7 @@ Il gruppo `load` **da solo** è il peggiore di tutti (0.5238): la potenza
 erogata rapportata al picco del soggetto, da sola, non basta a collocare le
 soglie.
 
-### `Load`: era la scala, non il contenuto
+### `Load`, e un problema più grande: la rete segue le scale
 
 `load_data.py` normalizza ogni colonna sul suo valore a riposo, ma solo se
 quel valore è diverso da zero. A riposo la potenza erogata è 0 su **tutti gli
@@ -150,8 +150,12 @@ quel valore è diverso da zero. A riposo la potenza erogata è 0 su **tutti gli
 in watt grezzi, media 66 e deviazione 76, mentre ogni altra feature è un
 rapporto con media tra 0.96 e 4.55.
 
-`experiment_load.py` misura le tre forme a parità di fold, epoche e modello,
-partendo dalle sette feature fisiologiche:
+`experiment_load.py` misura tre forme della stessa colonna a parità di fold,
+epoche e modello. `Load / 100` è l'esperimento chiave: ha la **forma identica**
+ai watt grezzi, quindi contiene esattamente la stessa informazione, e cambia
+solo la magnitudine.
+
+Aggiunta alle sette feature fisiologiche:
 
 | variante | F1 medio | scarto |
 |---|---|---|
@@ -160,15 +164,37 @@ partendo dalle sette feature fisiologiche:
 | `Load` / picco del soggetto | 0.7924 | +0.0080 |
 | `Load` / 100 (costante) | 0.7847 | +0.0003 |
 
-`Load / 100` ha la **forma identica** ai watt grezzi: stessa informazione,
-solo magnitudine diversa. Il calo sparisce. Quindi il danno era la scala, e
-l'ipotesi che `Load` peggiorasse il modello perché descrive il protocollo
-invece della risposta del soggetto **non è supportata**.
+Da sola, come unica feature:
 
-I due scarti positivi stanno dentro il rumore tra fold, quindi la lettura
-corretta è: normalizzata, `Load` non fa danno, e non è chiaro se aggiunga
-qualcosa. Per questo il gruppo `load` in `config.yaml` usa `Load_peak`, e la
-tabella qui sopra è calcolata su quella colonna.
+| variante | F1 medio | per fold |
+|---|---|---|
+| `Load` grezza (watt) | 0.6844 | 0.716 0.701 0.699 0.690 0.617 |
+| `Load` / picco del soggetto | 0.5238 | 0.353 0.589 0.580 0.512 0.585 |
+| `Load` / 100 (costante) | 0.4783 | 0.390 0.451 0.627 0.389 0.534 |
+
+Due conclusioni, la seconda più importante della prima.
+
+**Sul carico.** In combinazione, i watt grezzi peggiorano il modello e la
+stessa colonna riscalata non lo fa: il danno era la scala. Quindi l'ipotesi
+che `Load` peggiorasse il modello perché descrive il protocollo invece della
+risposta del soggetto **non è supportata**. Anzi, da sola la potenza in watt
+assoluti fa 0.6844, più di qualunque altra forma: le soglie cadono a carichi
+assoluti abbastanza riproducibili tra soggetti, e rapportare al picco di
+ciascuno (`Load_peak`) cancella quell'informazione.
+
+**Sulla rete.** `Load` grezza e `Load / 100` contengono la stessa
+informazione, e da sole danno 0.6844 contro 0.4783: **0.206 di divario per una
+semplice divisione per 100**, con i fold che non si sovrappongono. Il modello
+non sta rispondendo al contenuto delle feature ma alla loro magnitudine. Il
+pipeline non standardizza niente: ogni colonna finisce nella rete con la scala
+che le capita dal rapporto sul riposo, e quelle scale sono molto diverse fra
+loro (`VO2` ha deviazione 2.44, `VE/VCO2` 0.17).
+
+Questo è un confondente su **tutta** la tabella dei gruppi qui sopra: parte di
+quei confronti misura la fortuna di scala delle colonne, non il loro contenuto
+informativo. Il rimedio è standardizzare tutte le feature sulle statistiche
+del dev set e rifare il confronto. Finché non è fatto, il ranking dei gruppi
+va letto come indicativo.
 
 ### Quali iperparametri servono
 
@@ -255,11 +281,13 @@ alla quarta cifra. Il modello addestrato finisce in
 - **Le etichette sono di un solo operatore** e sono trattate come verità. Non
   c'è una stima della variabilità tra operatori, che nella lettura manuale
   delle soglie non è trascurabile.
+- **Nessuna standardizzazione delle feature**, e il modello è dimostrabilmente
+  sensibile alla scala (0.206 di F1 per una divisione per 100, vedi sopra).
+  Questo confonde in parte tutta la tabella dei gruppi di feature. È la cosa
+  più importante da sistemare.
 - **La normalizzazione salta silenziosamente** le colonne il cui valore di
   riposo è 0 o mancante (`load_data.py`). Su questi dati capita per `Load` su
-  tutti gli 82 file, ed è la ragione per cui la conclusione su `Load` resta
-  ambigua (vedi sopra). Nessun'altra colonna è interessata, ma il salto
-  avviene senza alcun avviso.
+  tutti gli 82 file, senza alcun avviso.
 - **`data/*.xlsx`** contiene 8 file fuori da `File_CPET/`, tre dei quali
   (`Id_10`, `Id_58`, `Id_70`) non sono nel dataset. Non è documentato perché
   siano esclusi.
@@ -291,6 +319,8 @@ su padding, ora il 18%.
 
 ### Da sistemare
 
+- **standardizzare le feature** sulle statistiche del dev set, e rifare il
+  confronto tra gruppi: è la modifica che cambierebbe di più i risultati
 - `pyproject.toml` e `pip install -e .`, per togliere i tre
   `sys.path.append(... .split('respirazione')[0] ...)` che si rompono se la
   cartella viene rinominata
