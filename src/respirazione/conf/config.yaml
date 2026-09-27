@@ -1,16 +1,18 @@
 defaults:
-  # features/selected.yaml lo scrive feature_lstm.py, model|optimizer/tuned.yaml
-  # li scrive tune_lstm.py. Sono normali config group e stanno nel repo, quindi
-  # una scelta esplicita da riga di comando (model=tenet_lstm, optimizer=sgd,
-  # features=columns_all) vince su di loro.
+  # features/selected.yaml lo scrive resp-select-features, model/tuned.yaml e
+  # optimizer/tuned.yaml li scrive resp-tune. Sono normali config group e stanno
+  # nel repo, quindi una scelta esplicita da riga di comando (model=tenet_lstm,
+  # optimizer=sgd, features=columns_all) vince su di loro.
   - dataset: file_cpet
   - features: selected
   - optimizer: tuned
   - model: tuned
   - _self_
 
+# project_root e' un resolver registrato in respirazione/paths.py: i percorsi
+# non dipendono dalla cartella da cui si lancia il comando.
 working_dir: ${hydra:runtime.cwd}
-data_dir: ${working_dir}/data/
+data_dir: ${project_root:}/data
 
 # Suddivisione dei dati: il test set resta fuori da tuning e feature selection
 split:
@@ -18,15 +20,15 @@ split:
   n_folds: 5
   seed: 42
 
-# Ricerca degli iperparametri (tune_lstm.py)
+# Ricerca degli iperparametri (resp-tune)
 n_trials: 40
 epochs_tuning: 12
 
-# Addestramento finale (train_lstm.py)
+# Addestramento finale (resp-train)
 epochs_final: 40
 patience: 5
 
-# Feature selection (feature_lstm.py): modello baseline uguale per tutti i
+# Feature selection (resp-select-features): modello baseline uguale per tutti i
 # gruppi, così il confronto misura le feature e non gli iperparametri
 feature_selection:
   hidden_size: 128

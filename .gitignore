@@ -136,7 +136,7 @@ CATKIN_IGNORE
 cmake-build-*/
 
 # BINARIES
-.pkl
+*.pkl
 
 
 ## Artefatti delle run
@@ -147,3 +147,6 @@ outputs/
 
 ## Checkpoint dei modelli
 checkpoints/
+
+## Cache dei test
+.pytest_cache/

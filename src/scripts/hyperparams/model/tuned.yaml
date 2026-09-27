@@ -1,5 +1,0 @@
-# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.
-name: tuned_lstm
-hidden_size: 151
-num_layers: 1
-dropout: 0.0

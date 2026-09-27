@@ -1,6 +1,6 @@
 """Ricerca degli iperparametri con Optuna, in cross validation sul dev set.
 
-Va lanciato dopo feature_lstm.py: usa il feature set che quello ha selezionato
+Va lanciato dopo resp-select-features: usa il feature set che quello ha selezionato
 (config group `selected`), così i parametri vengono cercati per il modello che
 si userà davvero. Il test set non viene mai visto durante la ricerca.
 """
@@ -10,18 +10,19 @@ import hydra
 import torch
 import torch.optim as optim
 import yaml
-import sys
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
-import os
-sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
-from config.definitions import ROOT_DIR
 import json
+import logging
 
-from src.splits import make_splits
-from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset
-from src.training import cross_validate, get_device
+from respirazione.paths import CONF_DIR, RESULTS_DIR
+from respirazione.splits import make_splits
+from respirazione.models.threshold_estimator import ThresholdEstimator
+from respirazione.data.dataset import TimeSeriesDataset
+from respirazione.training import cross_validate, get_device
+
+
+log = logging.getLogger(__name__)
 
 
 def objective(trial, cfg, dataset_path, columns, folds, device):
@@ -94,18 +95,18 @@ def write_tuned_config(best_params):
              # esserci tra i best_params.
              "dropout": best_params.get("dropout", 0.0)}
 
-    base = Path(ROOT_DIR) / "src/scripts/hyperparams"
+    base = CONF_DIR
     written = []
     for group, payload in (("model", model), ("optimizer", optimizer)):
         path = base / group / "tuned.yaml"
         with open(path, "w") as f:
-            f.write("# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.\n")
+            f.write("# Generato da resp-tune: non modificare a mano, viene sovrascritto.\n")
             yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)
         written.append(path)
     return written
 
 
-@hydra.main(config_path="hyperparams", config_name="config", version_base="1.3")
+@hydra.main(config_path="../conf", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     device = get_device()
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
@@ -116,11 +117,11 @@ def main(cfg: DictConfig):
                                                n_folds=cfg.split.n_folds,
                                                test_size=cfg.split.test_size,
                                                seed=cfg.split.seed)
-    print(f"feature: {columns}")
-    print(f"dev: {len(dev_index)} soggetti in {cfg.split.n_folds} fold | test: {len(test_index)} (non toccato)")
+    log.info(f"feature: {columns}")
+    log.info(f"dev: {len(dev_index)} soggetti in {cfg.split.n_folds} fold | test: {len(test_index)} (non toccato)")
 
     def logging_callback(study, trial):
-        print(f"Trial {trial.number} ({trial.state.name}): "
+        log.info(f"Trial {trial.number} ({trial.state.name}): "
               f"value = {trial.value if trial.value is not None else float('nan'):.4f} | "
               f"best so far = {study.best_value:.4f}")
 
@@ -135,8 +136,8 @@ def main(cfg: DictConfig):
     study.optimize(lambda trial: objective(trial, cfg, dataset_path, columns, folds, device),
                    n_trials=cfg.n_trials, callbacks=[logging_callback])
 
-    print("Best hyperparameters:", study.best_params)
-    print("Best F1 Score:", study.best_value)
+    log.info("Best hyperparameters: %s", study.best_params)
+    log.info("Best F1 Score: %s", study.best_value)
 
     best_params = dict(study.best_params) #parametri associati al miglior valore di f1
     output = {
@@ -151,11 +152,11 @@ def main(cfg: DictConfig):
     }
 
     # Path assoluto: Hydra puo' essere lanciato da qualunque cartella.
-    with open(Path(ROOT_DIR) / 'src/scripts/best_params.json', 'w') as f:
+    with open(RESULTS_DIR / 'best_params.json', 'w') as f:
         json.dump(output, f, indent=4)
 
     for path in write_tuned_config(best_params):
-        print(f"Config generata in {path}")
+        log.info(f"Config generata in {path}")
 
 
 if __name__ == "__main__":

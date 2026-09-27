@@ -1,4 +1,4 @@
-# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.
+# Generato da resp-tune: non modificare a mano, viene sovrascritto.
 name: adam
 lr: 0.0020934611757838766
 weight_decay: 4.305732370895641e-06

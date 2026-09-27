@@ -1,13 +1,13 @@
-import numpy as np
-
-from src.scripts.load_data import load_and_convert
-import torch
-from torch.nn.utils.rnn import pad_sequence
 import os
 from pathlib import Path
-from torch.utils.data import Dataset
 from pickle import load
-import hydra
+
+import numpy as np
+import torch
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import Dataset
+
+from respirazione.data.cpet import load_and_convert
 
 
 class TimeSeriesDataset(Dataset):
@@ -41,8 +41,6 @@ class TimeSeriesDataset(Dataset):
         return len(self.df_map)
 
     def __getitem__(self, item):
-        #print("the item: ", item)
-        #print("the file name: ", self.file_name(item))
         df = self.df_map[self.file_name(item)]
         features = df.loc[:, self.features].astype(np.float32).to_numpy()
         labels = df.loc[:, df.columns[-1:]].astype(np.float32).to_numpy()

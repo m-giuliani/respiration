@@ -5,7 +5,7 @@ scendere l'F1. Restano due spiegazioni che quel confronto non separa:
 
 1. Load descrive il protocollo della rampa, non la risposta del soggetto,
    quindi e' informazione che non generalizza.
-2. Load e' l'unica colonna che load_data.py non normalizza mai, perche' il suo
+2. Load e' l'unica colonna che il caricamento dati non normalizza mai, perche' il suo
    valore a riposo e' 0. Entra in watt grezzi (media 66, std 76) mentre ogni
    altra feature e' un rapporto con media tra 0.96 e 4.55.
 
@@ -18,21 +18,22 @@ recupera, resta l'ipotesi del contenuto.
 
 import hydra
 import json
-import os
-import sys
+import logging
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
-sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
-from config.definitions import ROOT_DIR
 
-from src.splits import make_splits
-from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset
-from src.training import cross_validate, get_device
+from respirazione.paths import RESULTS_DIR
+from respirazione.splits import make_splits
+from respirazione.models.threshold_estimator import ThresholdEstimator
+from respirazione.data.dataset import TimeSeriesDataset
+from respirazione.training import cross_validate, get_device
 
 
-@hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
+log = logging.getLogger(__name__)
+
+
+@hydra.main(config_path="../conf", config_name="config", version_base='1.3')
 def main(cfg: DictConfig):
     device = get_device()
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
@@ -63,14 +64,14 @@ def main(cfg: DictConfig):
                                                n_folds=cfg.split.n_folds,
                                                test_size=cfg.split.test_size,
                                                seed=cfg.split.seed)
-    print(f"base senza carico: {base_columns}")
-    print(f"base: {len(base_columns)} feature | dev {len(dev_index)} soggetti in "
+    log.info(f"base senza carico: {base_columns}")
+    log.info(f"base: {len(base_columns)} feature | dev {len(dev_index)} soggetti in "
           f"{cfg.split.n_folds} fold | test {len(test_index)} (non toccato)")
-    print(f"modello baseline: hidden {baseline.hidden_size}, {baseline.num_layers} layer, "
+    log.info(f"modello baseline: hidden {baseline.hidden_size}, {baseline.num_layers} layer, "
           f"dropout {baseline.dropout}, lr {baseline.lr}, batch {baseline.batch_size}, "
           f"{baseline.epochs} epoche\n")
 
-    output = Path(ROOT_DIR) / 'src/scripts/load_experiment.json'
+    output = RESULTS_DIR / 'load_experiment.json'
 
     def salva(risultati):
         # Scrive dopo ogni variante: una run interrotta a metà lascia comunque
@@ -96,20 +97,20 @@ def main(cfg: DictConfig):
             epochs=baseline.epochs, batch_size=baseline.batch_size, device=device)
         media = sum(scores) / len(scores)
         risultati[nome] = {'columns': columns, 'fold_f1': scores, 'mean_f1': media}
-        print(f"  {nome:28} F1 = {media:.4f}   fold: {[round(s, 3) for s in scores]}", flush=True)
+        log.info(f"  {nome:28} F1 = {media:.4f}   fold: {[round(s, 3) for s in scores]}")
         salva(risultati)
 
     riferimento = risultati['senza Load']['mean_f1']
-    print(f"\nin combinazione, scarto rispetto al gruppo senza Load ({riferimento:.4f}):")
+    log.info(f"\nin combinazione, scarto rispetto al gruppo senza Load ({riferimento:.4f}):")
     for nome in in_combinazione:
         if nome == 'senza Load':
             continue
-        print(f"  {nome:28} {risultati[nome]['mean_f1'] - riferimento:+.4f}")
-    print("\nda sola:")
+        log.info(f"  {nome:28} {risultati[nome]['mean_f1'] - riferimento:+.4f}")
+    log.info("\nda sola:")
     for nome in da_sola:
-        print(f"  {nome:28} {risultati[nome]['mean_f1']:.4f}")
+        log.info(f"  {nome:28} {risultati[nome]['mean_f1']:.4f}")
 
-    print(f"\nScritto in {output}")
+    log.info(f"\nScritto in {output}")
 
 
 if __name__ == '__main__':

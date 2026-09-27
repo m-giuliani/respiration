@@ -4,23 +4,24 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import json
-import os
+import logging
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from copy import deepcopy
 from pathlib import Path
 from tqdm import tqdm
-import sys
-sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
-from config.definitions import ROOT_DIR
 from datetime import datetime
 
-from src.splits import make_splits
-from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset
-from src.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
+from respirazione.paths import CHECKPOINT_DIR, RESULTS_DIR
+from respirazione.splits import make_splits
+from respirazione.models.threshold_estimator import ThresholdEstimator
+from respirazione.data.dataset import TimeSeriesDataset
+from respirazione.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
                           macro_scores, make_dataloader, training_loop, validation_loop)
 
 torch.manual_seed(42)
+
+log = logging.getLogger(__name__)
+
 
 NUM_CLASSES = 3
 CLASS_NAMES = {0: 'sotto AT', 1: 'tra AT e RC', 2: 'sopra RC'}
@@ -38,10 +39,10 @@ def hparams_for_tensorboard(cfg):
             **{f'optimizer/{k}': v for (k, v) in scalars(cfg.optimizer).items()}}
 
 
-@hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
+@hydra.main(config_path="../conf", config_name="config", version_base='1.3')
 def main(cfg: DictConfig):
 
-    print("\n\n\n", cfg, "\n\n\n")
+    log.info("configurazione:\n%s", OmegaConf.to_yaml(cfg))
 
     device = get_device()
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
@@ -62,7 +63,7 @@ def main(cfg: DictConfig):
     # l'early stopping sulla sua validation. Il test set entra in gioco una volta
     # sola, alla fine, e non influenza nessuna scelta.
     train_index, val_index = folds[0]
-    print(f"train: {len(train_index)} soggetti | validation: {len(val_index)} | test: {len(test_index)}")
+    log.info(f"train: {len(train_index)} soggetti | validation: {len(val_index)} | test: {len(test_index)}")
 
     train_dataloader = make_dataloader(dataset_path, train_index, columns, cfg.optimizer.batch_size, True)
     val_dataloader = make_dataloader(dataset_path, val_index, columns, cfg.optimizer.batch_size, False)
@@ -94,13 +95,13 @@ def main(cfg: DictConfig):
             best_model_state = deepcopy(model.state_dict())
             best_epoch = e
             early_stop_counter = 0
-            print(f"Epoch {e}: Validation loss improved to {val_loss:.4f}. Counter reset.")
+            log.info(f"Epoch {e}: Validation loss improved to {val_loss:.4f}. Counter reset.")
         else:
             early_stop_counter += 1
-            print(f"Epoch {e}: No improvement in validation loss. Counter: {early_stop_counter}/{patience}")
+            log.info(f"Epoch {e}: No improvement in validation loss. Counter: {early_stop_counter}/{patience}")
 
         if early_stop_counter >= patience:
-            print(f"Early stopping at epoch {e}. Best validation loss: {best_val_loss:.4f}")
+            log.info(f"Early stopping at epoch {e}. Best validation loss: {best_val_loss:.4f}")
             break
 
     if best_model_state is not None:
@@ -112,7 +113,7 @@ def main(cfg: DictConfig):
     test_precision, test_recall, test_f1 = macro_scores(test_labels, test_preds)
     writer.add_scalar('Loss/test', test_loss, best_epoch)
     writer.add_scalar('F1/test', test_f1, best_epoch)
-    print(f"\nTest set ({len(test_index)} soggetti, epoca {best_epoch}): "
+    log.info(f"\nTest set ({len(test_index)} soggetti, epoca {best_epoch}): "
           f"F1 = {test_f1:.4f} | precision = {test_precision:.4f} | "
           f"recall = {test_recall:.4f} | loss = {test_loss:.4f}")
 
@@ -126,15 +127,15 @@ def main(cfg: DictConfig):
         'recall': recall_score(test_labels, test_preds, average=None, labels=labels_order, zero_division=0).tolist(),
         'support': [int((torch.tensor(test_labels) == c).sum()) for c in labels_order],
     }
-    print("\nDettaglio per classe sul test set:")
+    log.info("\nDettaglio per classe sul test set:")
     for c in labels_order:
-        print(f"  {c} ({CLASS_NAMES[c]:11}): F1 {per_class['f1'][c]:.3f} | "
+        log.info(f"  {c} ({CLASS_NAMES[c]:11}): F1 {per_class['f1'][c]:.3f} | "
               f"precision {per_class['precision'][c]:.3f} | recall {per_class['recall'][c]:.3f} | "
               f"{per_class['support'][c]} campioni")
     cm = confusion_matrix(test_labels, test_preds, labels=labels_order).tolist()
-    print("matrice di confusione (righe = vero, colonne = predetto):")
+    log.info("matrice di confusione (righe = vero, colonne = predetto):")
     for c, row in zip(labels_order, cm):
-        print(f"  {CLASS_NAMES[c]:11} {row}")
+        log.info(f"  {CLASS_NAMES[c]:11} {row}")
 
     writer.add_hparams(hparams_for_tensorboard(cfg),
                        {'tr_loss': tr_loss, 'val_loss': val_loss, 'test_loss': test_loss,
@@ -158,12 +159,12 @@ def main(cfg: DictConfig):
                  'per_class': per_class,
                  'confusion_matrix': cm},
     }
-    with open(Path(ROOT_DIR) / 'src/scripts/test_results.json', 'w') as f:
+    with open(RESULTS_DIR / 'test_results.json', 'w') as f:
         json.dump(results, f, indent=4)
 
     # Senza questo l'unico modo di riavere il modello addestrato e' rifare il
     # training. E' deterministico, ma non e' una scusa per non salvarlo.
-    checkpoint_dir = Path(ROOT_DIR) / 'checkpoints'
+    checkpoint_dir = CHECKPOINT_DIR
     checkpoint_dir.mkdir(exist_ok=True)
     checkpoint_path = checkpoint_dir / 'threshold_estimator.pt'
     torch.save({'model_state_dict': model.state_dict(),
@@ -171,7 +172,7 @@ def main(cfg: DictConfig):
                 'model': OmegaConf.to_container(cfg.model),
                 'best_epoch': best_epoch,
                 'test_f1': test_f1}, checkpoint_path)
-    print(f"\nModello salvato in {checkpoint_path}")
+    log.info(f"\nModello salvato in {checkpoint_path}")
 
 
 if __name__ == '__main__':

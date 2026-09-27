@@ -26,7 +26,7 @@ respiro), `AT` e `RC` (gli istanti delle due soglie, segnati da un operatore),
 - sequenze da 80 a 1090 passi, mediana 508
 - ogni file è un soggetto diverso, quindi una sequenza equivale a un soggetto
 
-`src/scripts/load_data.py` li compatta in `data/sequence_dataset.pkl`,
+`resp-prepare-data` li compatta in `data/sequence_dataset.pkl`,
 normalizzando ogni colonna sul rispettivo valore di riposo e ricavando le
 etichette dagli istanti di AT e RC.
 
@@ -36,16 +36,21 @@ Le tre fasi vanno eseguite in quest'ordine, perché ognuna produce la
 configurazione della successiva.
 
 ```
-load_data.py      xlsx -> sequence_dataset.pkl
+resp-prepare-data      xlsx -> data/sequence_dataset.pkl
       |
-feature_lstm.py   confronta i 15 gruppi di feature in 5-fold CV
-      |           -> hyperparams/features/selected.yaml
-tune_lstm.py      Optuna sul gruppo vincente, 5-fold CV
-      |           -> hyperparams/model/tuned.yaml
-      |           -> hyperparams/optimizer/tuned.yaml
-train_lstm.py     addestramento finale e misura sul test set
-                  -> test_results.json, checkpoints/threshold_estimator.pt
+resp-select-features   confronta i 15 gruppi di feature in 5-fold CV
+      |                -> conf/features/selected.yaml
+      |                -> results/feature_results.json
+resp-tune              Optuna sul gruppo vincente, 5-fold CV
+      |                -> conf/model/tuned.yaml, conf/optimizer/tuned.yaml
+      |                -> results/best_params.json
+resp-train             addestramento finale e misura sul test set
+                       -> results/test_results.json
+                       -> checkpoints/threshold_estimator.pt
 ```
+
+C'è anche `resp-experiment-load`, che non fa parte della pipeline: risponde alla
+domanda sulla scala di `Load` descritta più sotto.
 
 I file generati sono normali config group di Hydra, versionati nel repo e
 selezionati nei `defaults` di `config.yaml`. Sono scritti dagli script e non
@@ -71,36 +76,44 @@ o 0.70 sullo stesso modello a seconda di come cadeva.
 
 ## Come si lancia
 
-Dipendenze (verificate con torch 2.14, hydra 1.3.7, optuna 5.0, pandas 2.3,
-scikit-learn 1.7):
+Il progetto è un package installabile: l'installazione editabile mette i comandi
+in PATH e rende gli import indipendenti dalla cartella da cui si lancia.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
-pip install torch pandas numpy scikit-learn hydra-core omegaconf optuna tqdm openpyxl tensorboard pytest
+pip install -e ".[dev]"
 ```
 
-Dalla radice del repo:
+Poi, da qualunque directory:
 
 ```bash
-python src/scripts/load_data.py         # solo se il pickle va rigenerato
-python src/scripts/feature_lstm.py
-python src/scripts/tune_lstm.py
-python src/scripts/train_lstm.py
-pytest src/test
+resp-prepare-data        # solo se il pickle va rigenerato dagli xlsx
+resp-select-features
+resp-tune
+resp-train
+pytest
 tensorboard --logdir runs
 ```
 
-Tutto è configurato in `src/scripts/hyperparams/config.yaml` e sovrascrivibile
-da riga di comando, come da convenzione Hydra:
+Oppure con i target del Makefile: `make install`, `make data`, `make features`,
+`make tune`, `make train`, `make test`, `make all`.
+
+Tutto è configurato in `src/respirazione/conf/config.yaml` e sovrascrivibile da
+riga di comando, come da convenzione Hydra:
 
 ```bash
-python src/scripts/train_lstm.py optimizer=sgd model=tenet_lstm epochs_final=10
-python src/scripts/train_lstm.py features=columns_all optimizer.batch_size=8
-python src/scripts/tune_lstm.py n_trials=100 search.hidden_max=128
+resp-train optimizer=sgd model=tenet_lstm epochs_final=10
+resp-train features=columns_all optimizer.batch_size=8
+resp-tune n_trials=100 search.hidden_max=128
 ```
 
-Per partire prima che il tuning abbia mai girato, o per ignorare i risultati
-salvati: `features=columns_all model=tenet_lstm optimizer=adam`.
+Per ignorare i risultati salvati e partire dai default:
+`features=columns_all model=tenet_lstm optimizer=adam`.
+
+Le config stanno dentro il package perché Hydra risolve `config_path` come
+modulo: con un'installazione editabile restano comunque file modificabili su
+disco. I percorsi dei dati non dipendono dalla directory corrente ma dal
+resolver `${project_root:}`, registrato in `respirazione/paths.py`.
 
 ## Risultati
 
@@ -144,7 +157,7 @@ soglie.
 
 ### `Load`, e un problema più grande: la rete segue le scale
 
-`load_data.py` normalizza ogni colonna sul suo valore a riposo, ma solo se
+`data/cpet.py` normalizza ogni colonna sul suo valore a riposo, ma solo se
 quel valore è diverso da zero. A riposo la potenza erogata è 0 su **tutti gli
 82 file**, quindi la divisione viene sempre saltata: `Load` entrava nella rete
 in watt grezzi, media 66 e deviazione 76, mentre ogni altra feature è un
@@ -286,7 +299,7 @@ alla quarta cifra. Il modello addestrato finisce in
   Questo confonde in parte tutta la tabella dei gruppi di feature. È la cosa
   più importante da sistemare.
 - **La normalizzazione salta silenziosamente** le colonne il cui valore di
-  riposo è 0 o mancante (`load_data.py`). Su questi dati capita per `Load` su
+  riposo è 0 o mancante (`data/cpet.py`). Su questi dati capita per `Load` su
   tutti gli 82 file, senza alcun avviso.
 - **`data/*.xlsx`** contiene 8 file fuori da `File_CPET/`, tre dei quali
   (`Id_10`, `Id_58`, `Id_70`) non sono nel dataset. Non è documentato perché
@@ -295,38 +308,43 @@ alla quarta cifra. Il modello addestrato finisce in
 ## Struttura
 
 ```
-config/definitions.py        ROOT_DIR
-src/
+pyproject.toml              package installabile, dipendenze, entry point
+Makefile                    scorciatoie per l'ordine della pipeline
+src/respirazione/
+  paths.py                  radice del progetto e resolver ${project_root:}
   splits.py                 test set + fold di cross validation
   training.py               loop, metriche, cross_validate, batching per lunghezza
-  threshold_estimator.py    l'LSTM
-  timeseriesdataset.py      Dataset e collate
-  lstm.py                   LSTM scritta a mano, incompleta, non usata
-  scripts/
-    load_data.py            xlsx -> pickle
-    feature_lstm.py         feature selection
-    tune_lstm.py            Optuna
-    train_lstm.py           addestramento finale + test
-    lstm_tutorial.py        tutorial PyTorch, non usato
-    hyperparams/            config Hydra (dataset, features, model, optimizer)
-  test/                     test del Dataset
+  data/
+    cpet.py                 lettura degli xlsx, normalizzazione, etichette
+    dataset.py              Dataset e collate
+  models/
+    threshold_estimator.py  l'LSTM
+  cli/
+    prepare_data.py         resp-prepare-data
+    select_features.py      resp-select-features
+    tune.py                 resp-tune
+    train.py                resp-train
+    experiment_load.py      resp-experiment-load
+  conf/                     config Hydra (dataset, features, model, optimizer)
+tests/                      dataset, split, batching
+results/                    i json prodotti dalle run
 data/                       xlsx e pickle
+outputs/ runs/ checkpoints/  artefatti delle run (ignorati da git)
 ```
 
 Le sequenze di lunghezza simile finiscono nello stesso batch
-(`LengthBucketBatchSampler`): con i batch casuali il 40% del calcolo finiva
-su padding, ora il 18%.
+(`LengthBucketBatchSampler`): con i batch casuali il 40% del calcolo finiva su
+padding, ora il 18%.
 
 ### Da sistemare
 
 - **standardizzare le feature** sulle statistiche del dev set, e rifare il
   confronto tra gruppi: è la modifica che cambierebbe di più i risultati
-- `pyproject.toml` e `pip install -e .`, per togliere i tre
-  `sys.path.append(... .split('respirazione')[0] ...)` che si rompono se la
-  cartella viene rinominata
-- `conf/` fuori da `src/`
-- gli script usano `print()`, quindi i file `.log` che Hydra crea in
-  `outputs/` sono vuoti: tutte le run archiviate non hanno una riga di output
-- codice morto: `src/lstm.py`, `src/scripts/lstm_tutorial.py`, le 50 righe
-  commentate in testa a `load_data.py`
-- `.gitignore` ha `.pkl` invece di `*.pkl`
+- **misurare l'errore della soglia** in secondi o watt, non solo la F1 per
+  respiro: è la metrica che rende il lavoro leggibile a un medico
+- **confrontare col metodo clinico** (V-slope), altrimenti non si sa se 0.73 sia
+  un buon numero
+- `data/` contiene 8 xlsx fuori da `File_CPET/`, tre dei quali (`Id_10`,
+  `Id_58`, `Id_70`) non sono nel dataset: non è documentato perché
+- `PROJECT_ROOT` in `paths.py` assume un'installazione editabile, che è il modo
+  in cui il progetto va usato ma non l'unico possibile

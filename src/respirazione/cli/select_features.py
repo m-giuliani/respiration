@@ -11,16 +11,17 @@ import yaml
 from omegaconf import DictConfig, OmegaConf
 from itertools import combinations
 from pathlib import Path
-import sys
-import os
 import json
-sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
-from config.definitions import ROOT_DIR
+import logging
 
-from src.splits import make_splits
-from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset
-from src.training import cross_validate, get_device
+from respirazione.paths import CONF_DIR, RESULTS_DIR
+from respirazione.splits import make_splits
+from respirazione.models.threshold_estimator import ThresholdEstimator
+from respirazione.data.dataset import TimeSeriesDataset
+from respirazione.training import cross_validate, get_device
+
+
+log = logging.getLogger(__name__)
 
 
 def generate_combinations(groups):
@@ -37,7 +38,7 @@ def generate_combinations(groups):
     return combined_groups
 
 
-@hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
+@hydra.main(config_path="../conf", config_name="config", version_base='1.3')
 def main(cfg: DictConfig):
 
     device = get_device()
@@ -46,14 +47,14 @@ def main(cfg: DictConfig):
 
     groups = OmegaConf.to_container(cfg.feature_groups)
     all_groups = generate_combinations(groups)
-    print(f"{len(all_groups)} combinazioni da valutare in {cfg.split.n_folds}-fold CV")
+    log.info(f"{len(all_groups)} combinazioni da valutare in {cfg.split.n_folds}-fold CV")
 
     total_dataset = TimeSeriesDataset(dataset_path)
     folds, dev_index, test_index = make_splits(len(total_dataset),
                                                n_folds=cfg.split.n_folds,
                                                test_size=cfg.split.test_size,
                                                seed=cfg.split.seed)
-    print(f"dev: {len(dev_index)} soggetti | test: {len(test_index)} (non toccato)")
+    log.info(f"dev: {len(dev_index)} soggetti | test: {len(test_index)} (non toccato)")
 
     def evaluate_feature_group(group_name, group_features):
         def build_model():
@@ -72,12 +73,12 @@ def main(cfg: DictConfig):
                                      device=device)
         mean_f1 = sum(fold_scores) / len(fold_scores)
         spread = max(fold_scores) - min(fold_scores)
-        print(f"  {group_name}: F1 = {mean_f1:.4f} (fold: {[round(s, 3) for s in fold_scores]}, spread {spread:.3f})")
+        log.info(f"  {group_name}: F1 = {mean_f1:.4f} (fold: {[round(s, 3) for s in fold_scores]}, spread {spread:.3f})")
         return mean_f1, fold_scores
 
     results = {}
     for group_name, group_features in all_groups.items():
-        print(f"Testing group: {group_name} ({len(group_features)} feature)")
+        log.info(f"Testing group: {group_name} ({len(group_features)} feature)")
         mean_f1, fold_scores = evaluate_feature_group(group_name, group_features)
         results[group_name] = {'mean_f1': mean_f1, 'fold_f1': fold_scores,
                                'columns': group_features}
@@ -85,15 +86,15 @@ def main(cfg: DictConfig):
     # ordina dal migliore
     sorted_results = sorted(results.items(), key=lambda x: x[1]['mean_f1'], reverse=True)
     if not sorted_results:
-        print("Nessun risultato disponibile. Controlla i dati o la configurazione.")
+        log.info("Nessun risultato disponibile. Controlla i dati o la configurazione.")
         return
 
-    print("\nRisultati ordinati (F1 medio in cross validation):")
+    log.info("\nRisultati ordinati (F1 medio in cross validation):")
     for group_name, res in sorted_results:
-        print(f"{group_name}: F1 = {res['mean_f1']:.4f}")
+        log.info(f"{group_name}: F1 = {res['mean_f1']:.4f}")
 
     best_name, best = sorted_results[0]
-    output_path = Path(ROOT_DIR) / "src/scripts/feature_results.json"
+    output_path = RESULTS_DIR / "feature_results.json"
     with open(output_path, "w") as f:
         json.dump({
             "protocol": f"{cfg.split.n_folds}-fold CV sul dev set, test set escluso",
@@ -106,15 +107,15 @@ def main(cfg: DictConfig):
     # Scrive il gruppo vincente come normale config group di Hydra, così il
     # tuning e l'addestramento lo usano senza ricopiarlo a mano e una scelta
     # esplicita da riga di comando (features=columns_all) continua a vincere.
-    out = Path(ROOT_DIR) / "src/scripts/hyperparams/features/selected.yaml"
+    out = CONF_DIR / "features" / "selected.yaml"
     with open(out, "w") as f:
-        f.write("# Generato da feature_lstm.py: gruppo vincente in cross validation.\n")
+        f.write("# Generato da resp-select-features: gruppo vincente in cross validation.\n")
         yaml.safe_dump({"name": f"selected_{best_name}",
                         "columns": list(best['columns'])}, f,
                        default_flow_style=False, sort_keys=False)
 
-    print(f"\nMiglior gruppo: {best_name} con F1 = {best['mean_f1']:.4f}")
-    print(f"Scritto in {out}")
+    log.info(f"\nMiglior gruppo: {best_name} con F1 = {best['mean_f1']:.4f}")
+    log.info(f"Scritto in {out}")
 
 
 if __name__ == "__main__":

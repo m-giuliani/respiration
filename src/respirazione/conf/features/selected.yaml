@@ -1,4 +1,4 @@
-# Generato da feature_lstm.py: gruppo vincente in cross validation.
+# Generato da resp-select-features: gruppo vincente in cross validation.
 name: selected_respiratory_cardiac_metabolic_load
 columns:
 - Rf
