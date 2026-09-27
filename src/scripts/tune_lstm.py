@@ -1,10 +1,10 @@
 import optuna
 import hydra
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
-from datetime import datetime
 import sys
 from pathlib import Path
 from omegaconf import DictConfig
@@ -14,37 +14,31 @@ from config.definitions import ROOT_DIR
 import json
 from src.threshold_estimator import ThresholdEstimator
 from src.timeseriesdataset import TimeSeriesDataset, collate_fn
-from train_lstm import training_loop, validation_loop
+from train_lstm import training_loop, validation_loop, get_device, PAD_LABEL
 
-device = "cpu"
-def objective(trial, cfg):
-    
 
-    
+def objective(trial, cfg, device):
     # Funzione obiettivo per la ricerca degli iperparametri tramite Optuna.
     # Parametri:
     # - trial: oggetto di Optuna che tiene traccia dei tentativi.
     # - cfg: configurazione che contiene le impostazioni del progetto.
-    
+    # - device: dispositivo su cui addestrare, condiviso con i loop di training.
 
-    
-     # Definiamo lo spazio di ricerca per gli iperparametri
-    hidden_size = trial.suggest_int("hidden_size", 32, 512)  
+    # Definiamo lo spazio di ricerca per gli iperparametri
+    hidden_size = trial.suggest_int("hidden_size", 32, 512)
     num_layers = trial.suggest_int("num_layers", 1, 4)
-    lr = trial.suggest_float("lr", 1e-5, 1e-2) 
+    lr = trial.suggest_float("lr", 1e-5, 1e-2)
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
-    
+
     # Tipo di ottimizzatore da utilizzare
     optimizer_name = trial.suggest_categorical("optimizer", ["adam", "sgd"])
 
     dropout = trial.suggest_float("dropout", 0, 0.5)
     weight_decay = trial.suggest_float("weight_decay", 0, 0.01)
-    
-    
+
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
     columns = cfg.features.columns
     total_dataset = TimeSeriesDataset(dataset_path, columns=columns)
-    
 
     index_tr, index_te = train_test_split(range(len(total_dataset)), random_state=42)
     train_dataset = TimeSeriesDataset(dataset_path, index_tr, columns=columns)
@@ -64,7 +58,7 @@ def objective(trial, cfg):
         dropout=dropout,
     ).to(device)
 
-    loss_function = nn.CrossEntropyLoss(ignore_index=-1)
+    loss_function = nn.CrossEntropyLoss(ignore_index=PAD_LABEL)
     if optimizer_name == "adam":
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     else:
@@ -72,9 +66,11 @@ def objective(trial, cfg):
 
     #cerco i valori migliori
     best_val_f1 = 0
-    for epoch in range(cfg.epochs_tuning): 
-        tr_loss, tr_f1, _, _ = training_loop(model, train_dataloader, loss_function, optimizer, epoch)
-        val_loss, val_f1, _, _ = validation_loop(model, test_dataloader, loss_function, epoch)
+    for epoch in range(cfg.epochs_tuning):
+        tr_loss, tr_f1, _, _ = training_loop(
+            model, train_dataloader, loss_function, optimizer, epoch, device=device)
+        val_loss, val_f1, _, _ = validation_loop(
+            model, test_dataloader, loss_function, epoch, device=device)
         trial.report(val_f1, epoch) # Report dell'F1 score per l'epoca corrente
         if trial.should_prune(): #verifica se il trial deve essere "potato"
             raise optuna.exceptions.TrialPruned()
@@ -83,26 +79,31 @@ def objective(trial, cfg):
 
     return best_val_f1
 
+
 @hydra.main(config_path="hyperparams", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
+    device = get_device()
+
     def logging_callback(study, trial):
         print(f"Trial {trial.number}: Best Value so far = {study.best_value}")
 
-    #crea lo studio per massimizzare f1, interrompe usando mediana 
+    #crea lo studio per massimizzare f1, interrompe usando mediana
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(), pruner=optuna.pruners.MedianPruner())
     # Esegue l'ottimizzazione su 30 trial
-    study.optimize(lambda trial: objective(trial, cfg), n_trials=30, callbacks=[logging_callback])  
+    study.optimize(lambda trial: objective(trial, cfg, device), n_trials=30, callbacks=[logging_callback])
 
     print("Best hyperparameters:", study.best_params)
     print("Best F1 Score:", study.best_value)
- 
+
     best_params = study.best_params #parametri associale al miglior valore di f1
     best_params['best_f1'] = study.best_value #valore restituito da objective
 
-    output_path = Path('src/scripts/best_params.json')
+    # Path assoluto: Hydra puo' essere lanciato da qualunque cartella.
+    output_path = Path(ROOT_DIR) / 'src/scripts/best_params.json'
 
     with open(output_path, 'w') as f:
         json.dump(best_params, f, indent=4)
+
 
 if __name__ == "__main__":
     main()

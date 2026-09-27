@@ -1,3 +1,4 @@
 name: tenet_lstm
 hidden_size: 120
 num_layers: 3
+dropout: 0

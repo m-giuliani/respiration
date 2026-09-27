@@ -1,8 +1,8 @@
 defaults:
   - dataset: file_cpet
   - features: columns_breath
-  - optimizer: adam
-  - model: tenet_lstm
+  - optimizer: adam_tuned
+  - model: tuned_lstm
   - _self_
 
 working_dir: ${hydra:runtime.cwd}
@@ -14,20 +14,8 @@ epochs_tuning: 5
 # Impostazioni per l'addestramento finale
 epochs_final: 20
 
-  
-model:
-  hidden_size: 454  # Migliore valore trovato
-  num_layers: 2  # Migliore valore trovato
-  dropout: 0.29703774097264446  # Migliore valore trovato
-
-# Ottimizzatore
-optimizer:
-  name: adam  # Migliore ottimizzatore trovato
-  lr: 0.0023616905639792267  # Migliore valore trovato
-  weight_decay: 0.0006614343893705291  # Migliore valore trovato
-
 feature_groups:
   respiratory: ['Rf', 'VE/VO2', 'VE/VCO2']
   cardiac: ['HR', 'VO2/HR']
   metabolic: ['VO2', 'VCO2']
-  load: ['Load'] 
+  load: ['Load']

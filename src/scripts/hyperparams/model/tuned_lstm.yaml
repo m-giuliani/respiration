@@ -1,0 +1,5 @@
+# Valori trovati dal tuning con Optuna (src/scripts/best_params.json)
+name: tuned_lstm
+hidden_size: 454
+num_layers: 2
+dropout: 0.29703774097264446

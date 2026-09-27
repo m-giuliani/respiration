@@ -1,5 +1,4 @@
 name: file_cpet_00
 path: sequence_dataset.pkl
 labels:
-  - label_at
-  - label_rc
+  - label
