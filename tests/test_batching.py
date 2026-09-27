@@ -1,6 +1,6 @@
 import torch
 
-from respirazione.training import LengthBucketBatchSampler
+from respiration.training import LengthBucketBatchSampler
 
 LENGTHS = [500, 80, 1090, 300, 620, 150, 940, 210, 760, 430]
 

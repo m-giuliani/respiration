@@ -1,8 +1,8 @@
 """Percorsi del progetto, ricavati dalla posizione del package.
 
-Sostituisce il vecchio `config/definitions.py`, che ricavava la radice con
-`os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione'`: si
-rompeva se la cartella veniva rinominata e dipendeva dalla directory corrente.
+Sostituisce il vecchio `config/definitions.py`, che ricavava la radice cercando
+il nome della cartella dentro il percorso corrente: si rompeva se la cartella
+veniva rinominata e dipendeva dalla directory da cui si lanciava.
 Vale per un'installazione editabile (`pip install -e .`), che e' il modo in cui
 questo progetto va usato.
 """

@@ -3,8 +3,8 @@
 import logging
 from pickle import dump
 
-from respirazione.data.cpet import load_and_convert
-from respirazione.paths import DATA_DIR
+from respiration.data.cpet import load_and_convert
+from respiration.paths import DATA_DIR
 
 log = logging.getLogger(__name__)
 

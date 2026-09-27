@@ -11,11 +11,11 @@ from pathlib import Path
 from tqdm import tqdm
 from datetime import datetime
 
-from respirazione.paths import CHECKPOINT_DIR, RESULTS_DIR
-from respirazione.splits import make_splits
-from respirazione.models.threshold_estimator import ThresholdEstimator
-from respirazione.data.dataset import TimeSeriesDataset
-from respirazione.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
+from respiration.paths import CHECKPOINT_DIR, RESULTS_DIR
+from respiration.splits import make_splits
+from respiration.models.threshold_estimator import ThresholdEstimator
+from respiration.data.dataset import TimeSeriesDataset
+from respiration.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
                           macro_scores, make_dataloader, training_loop, validation_loop)
 
 torch.manual_seed(42)

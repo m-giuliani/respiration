@@ -4,8 +4,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from respirazione.data.dataset import TimeSeriesDataset
-from respirazione.paths import DATA_DIR
+from respiration.data.dataset import TimeSeriesDataset
+from respiration.paths import DATA_DIR
 
 CPET_DIR = DATA_DIR / 'File_CPET'
 

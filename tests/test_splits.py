@@ -1,6 +1,6 @@
 import math
 
-from respirazione.splits import make_splits
+from respiration.splits import make_splits
 
 N = 82
 

@@ -9,7 +9,7 @@ defaults:
   - model: tuned
   - _self_
 
-# project_root e' un resolver registrato in respirazione/paths.py: i percorsi
+# project_root e' un resolver registrato in respiration/paths.py: i percorsi
 # non dipendono dalla cartella da cui si lancia il comando.
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${project_root:}/data

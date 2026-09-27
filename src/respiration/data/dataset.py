@@ -7,7 +7,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
-from respirazione.data.cpet import load_and_convert
+from respiration.data.cpet import load_and_convert
 
 
 class TimeSeriesDataset(Dataset):

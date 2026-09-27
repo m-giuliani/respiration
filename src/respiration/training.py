@@ -7,7 +7,7 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 from torch.utils.data import DataLoader, Sampler
 from tqdm import tqdm
 
-from respirazione.data.dataset import TimeSeriesDataset, collate_fn
+from respiration.data.dataset import TimeSeriesDataset, collate_fn
 
 NUM_CLASSES = 3
 PAD_LABEL = -1

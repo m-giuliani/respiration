@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "respirazione"
+name = "respiration"
 version = "0.1.0"
 description = "Stima delle soglie ventilatorie AT e RC da test CPET con una LSTM"
 requires-python = ">=3.10"
@@ -24,11 +24,11 @@ dependencies = [
 dev = ["pytest>=7.4"]
 
 [project.scripts]
-resp-prepare-data = "respirazione.cli.prepare_data:main"
-resp-select-features = "respirazione.cli.select_features:main"
-resp-tune = "respirazione.cli.tune:main"
-resp-train = "respirazione.cli.train:main"
-resp-experiment-load = "respirazione.cli.experiment_load:main"
+resp-prepare-data = "respiration.cli.prepare_data:main"
+resp-select-features = "respiration.cli.select_features:main"
+resp-tune = "respiration.cli.tune:main"
+resp-train = "respiration.cli.train:main"
+resp-experiment-load = "respiration.cli.experiment_load:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,8 +36,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 # Le config viaggiano col package: Hydra risolve config_path come modulo, quindi
 # conf/ ha anche un __init__.py.
-respirazione = ["conf/**/*.yaml"]
-"respirazione.conf" = ["**/*.yaml"]
+respiration = ["conf/**/*.yaml"]
+"respiration.conf" = ["**/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

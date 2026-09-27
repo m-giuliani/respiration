@@ -1,4 +1,4 @@
-# respirazione
+# respiration
 
 Estimating ventilatory thresholds from CPET data with an LSTM.
 
@@ -64,7 +64,7 @@ tuner needs somewhere to be written.
 
 ### How the data is split
 
-`src/respirazione/splits.py` holds back **20% of the subjects (17) as a test
+`src/respiration/splits.py` holds back **20% of the subjects (17) as a test
 set** and divides the remaining 65 into 5 folds. Feature selection,
 hyperparameter search and early stopping work only on the folds. The test set is
 read once, at the very end.
@@ -97,7 +97,7 @@ tensorboard --logdir runs
 Or through the Makefile targets: `make install`, `make data`, `make features`,
 `make tune`, `make train`, `make test`, `make all`.
 
-Everything is configured in `src/respirazione/conf/config.yaml` and overridable
+Everything is configured in `src/respiration/conf/config.yaml` and overridable
 from the command line, following Hydra conventions:
 
 ```bash
@@ -112,7 +112,7 @@ To ignore the stored results and start from the defaults:
 The configs live inside the package because Hydra resolves `config_path` as a
 module: with an editable install they are still plain files you can edit on
 disk. Data paths do not depend on the current directory but on the
-`${project_root:}` resolver, registered in `respirazione/paths.py`.
+`${project_root:}` resolver, registered in `respiration/paths.py`.
 
 ## Results
 
@@ -343,7 +343,7 @@ is kept out of every selection step and read once.
 ```
 pyproject.toml              installable package, dependencies, entry points
 Makefile                    shortcuts for the pipeline order
-src/respirazione/
+src/respiration/
   paths.py                  project root and the ${project_root:} resolver
   splits.py                 test set + cross validation folds
   training.py               loops, metrics, cross_validate, length bucketing

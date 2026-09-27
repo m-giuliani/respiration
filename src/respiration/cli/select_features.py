@@ -14,11 +14,11 @@ from pathlib import Path
 import json
 import logging
 
-from respirazione.paths import CONF_DIR, RESULTS_DIR
-from respirazione.splits import make_splits
-from respirazione.models.threshold_estimator import ThresholdEstimator
-from respirazione.data.dataset import TimeSeriesDataset
-from respirazione.training import cross_validate, get_device
+from respiration.paths import CONF_DIR, RESULTS_DIR
+from respiration.splits import make_splits
+from respiration.models.threshold_estimator import ThresholdEstimator
+from respiration.data.dataset import TimeSeriesDataset
+from respiration.training import cross_validate, get_device
 
 
 log = logging.getLogger(__name__)
