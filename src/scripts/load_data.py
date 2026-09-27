@@ -62,6 +62,11 @@ import numpy as np
 # test_df['t'].head(), at_df['t'].iloc[1], rc_df['t'].iloc[1]
 
 
+# Scala fissa per Load: divide i watt per un valore costante, quindi cambia
+# solo la magnitudine dell'ingresso senza usare informazione del soggetto.
+LOAD_SCALE = 100.0
+
+
 # now that we tested for one file, let's do it for all the files to create a dataset
 def load_and_convert(cpet_data_folder):
     if isinstance(cpet_data_folder, str):
@@ -97,7 +102,17 @@ def load_and_convert(cpet_data_folder):
             if media_rest_df.iloc[0][col]:
                 test_df[col] /= float(media_rest_df.iloc[0][col])
 
-        test_df.head()
+        # 'Load' e' l'unica colonna con valore a riposo 0, quindi il ciclo qui
+        # sopra non la normalizza mai: resta in watt grezzi (ordine delle
+        # centinaia) mentre tutte le altre diventano rapporti intorno a 1.
+        # Queste due varianti servono a capire se peggiora il modello per la
+        # scala o per il contenuto:
+        #   Load_peak   rapporto sul picco del soggetto, come le altre feature
+        #               sono rapporti sul suo riposo
+        #   Load_scaled stessa forma, solo riscalata di una costante
+        peak = test_df['Load'].max()
+        test_df['Load_peak'] = test_df['Load'] / peak if peak else test_df['Load']
+        test_df['Load_scaled'] = test_df['Load'] / LOAD_SCALE
 
         if sum(test_df.isna().any(axis=1)) != 0:
             print("critical file path: ", file_path)

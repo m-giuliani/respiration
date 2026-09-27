@@ -1,0 +1,101 @@
+{
+    "protocol": "5-fold CV sul dev set, 15 epoche per fold, stessi fold e stesso modello",
+    "baseline_model": {
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "lr": 0.001,
+        "batch_size": 16,
+        "epochs": 15
+    },
+    "base_columns": [
+        "Rf",
+        "VE/VO2",
+        "VE/VCO2",
+        "HR",
+        "VO2/HR",
+        "VO2",
+        "VCO2"
+    ],
+    "variants": {
+        "senza Load": {
+            "columns": [
+                "Rf",
+                "VE/VO2",
+                "VE/VCO2",
+                "HR",
+                "VO2/HR",
+                "VO2",
+                "VCO2"
+            ],
+            "fold_f1": [
+                0.8318618829752856,
+                0.7671512645205586,
+                0.8242269081619006,
+                0.7530452213059323,
+                0.7457350036605633
+            ],
+            "mean_f1": 0.7844040561248481
+        },
+        "Load grezza (watt)": {
+            "columns": [
+                "Rf",
+                "VE/VO2",
+                "VE/VCO2",
+                "HR",
+                "VO2/HR",
+                "VO2",
+                "VCO2",
+                "Load"
+            ],
+            "fold_f1": [
+                0.814158547626489,
+                0.7530983112214994,
+                0.8255157575747415,
+                0.7175293442556931,
+                0.7283594882316086
+            ],
+            "mean_f1": 0.7677322897820062
+        },
+        "Load / picco del soggetto": {
+            "columns": [
+                "Rf",
+                "VE/VO2",
+                "VE/VCO2",
+                "HR",
+                "VO2/HR",
+                "VO2",
+                "VCO2",
+                "Load_peak"
+            ],
+            "fold_f1": [
+                0.8295859841076879,
+                0.8016756080049294,
+                0.8384252768183109,
+                0.7470665765148555,
+                0.7451217118955936
+            ],
+            "mean_f1": 0.7923750314682755
+        },
+        "Load / 100 (costante)": {
+            "columns": [
+                "Rf",
+                "VE/VO2",
+                "VE/VCO2",
+                "HR",
+                "VO2/HR",
+                "VO2",
+                "VCO2",
+                "Load_scaled"
+            ],
+            "fold_f1": [
+                0.8363652241997833,
+                0.8048188915557851,
+                0.8237103643104629,
+                0.7318954020981171,
+                0.7267938576098807
+            ],
+            "mean_f1": 0.7847167479548058
+        }
+    }
+}
