@@ -1,108 +1,151 @@
+"""Ricerca degli iperparametri con Optuna, in cross validation sul dev set.
+
+Va lanciato dopo feature_lstm.py: usa il feature set che quello ha selezionato
+(config group `selected`), così i parametri vengono cercati per il modello che
+si userà davvero. Il test set non viene mai visto durante la ricerca.
+"""
+
 import optuna
 import hydra
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
+import yaml
 import sys
 from pathlib import Path
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import os
 sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
 from config.definitions import ROOT_DIR
 import json
+
+from src.splits import make_splits
 from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset, collate_fn
-from train_lstm import training_loop, validation_loop, get_device, PAD_LABEL
+from src.timeseriesdataset import TimeSeriesDataset
+from src.training import cross_validate, get_device
 
 
-def objective(trial, cfg, device):
+def objective(trial, cfg, dataset_path, columns, folds, device):
     # Funzione obiettivo per la ricerca degli iperparametri tramite Optuna.
-    # Parametri:
-    # - trial: oggetto di Optuna che tiene traccia dei tentativi.
-    # - cfg: configurazione che contiene le impostazioni del progetto.
-    # - device: dispositivo su cui addestrare, condiviso con i loop di training.
+    # Restituisce l'F1 medio sui fold di validazione: una configurazione buona
+    # su un fold solo non deve vincere per fortuna.
 
     # Definiamo lo spazio di ricerca per gli iperparametri
     hidden_size = trial.suggest_int("hidden_size", 32, 512)
     num_layers = trial.suggest_int("num_layers", 1, 4)
-    lr = trial.suggest_float("lr", 1e-5, 1e-2)
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
 
     # Tipo di ottimizzatore da utilizzare
     optimizer_name = trial.suggest_categorical("optimizer", ["adam", "sgd"])
 
-    dropout = trial.suggest_float("dropout", 0, 0.5)
-    weight_decay = trial.suggest_float("weight_decay", 0, 0.01)
+    dropout = trial.suggest_float("dropout", 0, 0.5) if num_layers > 1 else 0.0
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
 
-    dataset_path = Path(cfg.data_dir) / cfg.dataset.path
-    columns = cfg.features.columns
-    total_dataset = TimeSeriesDataset(dataset_path, columns=columns)
+    def build_model():
+        return ThresholdEstimator(input_size=len(columns), hidden_size=hidden_size,
+                                  num_layers=num_layers, dropout=dropout)
 
-    index_tr, index_te = train_test_split(range(len(total_dataset)), random_state=42)
-    train_dataset = TimeSeriesDataset(dataset_path, index_tr, columns=columns)
-    test_dataset = TimeSeriesDataset(dataset_path, index_te, columns=columns)
+    def make_optimizer(model):
+        if optimizer_name == "adam":
+            return optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+        return optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
 
-    train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn
-    )
-    test_dataloader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
-    )
-
-    model = ThresholdEstimator(
-        input_size=len(total_dataset.features),
-        hidden_size=hidden_size,
-        num_layers=num_layers,
-        dropout=dropout,
-    ).to(device)
-
-    loss_function = nn.CrossEntropyLoss(ignore_index=PAD_LABEL)
-    if optimizer_name == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    else:
-        optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=0.9)
-
-    #cerco i valori migliori
-    best_val_f1 = 0
-    for epoch in range(cfg.epochs_tuning):
-        tr_loss, tr_f1, _, _ = training_loop(
-            model, train_dataloader, loss_function, optimizer, epoch, device=device)
-        val_loss, val_f1, _, _ = validation_loop(
-            model, test_dataloader, loss_function, epoch, device=device)
-        trial.report(val_f1, epoch) # Report dell'F1 score per l'epoca corrente
-        if trial.should_prune(): #verifica se il trial deve essere "potato"
+    def on_fold_end(fold, scores):
+        # Report dell'F1 medio dopo ogni fold: i trial scarsi vengono potati
+        # senza pagare tutti e cinque i fold.
+        trial.report(sum(scores) / len(scores), fold)
+        if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
 
-    return best_val_f1
+    fold_scores = cross_validate(dataset_path, columns, folds, build_model, make_optimizer,
+                                 epochs=cfg.epochs_tuning, batch_size=batch_size,
+                                 device=device, on_fold_end=on_fold_end)
+    trial.set_user_attr("fold_f1", fold_scores)
+    return sum(fold_scores) / len(fold_scores)
+
+
+def write_tuned_config(best_params):
+    """Scrive gli iperparametri vincenti come config Hydra.
+
+    Ricopiarli a mano in config.yaml è il passaggio che in passato ha prodotto
+    override inline incoerenti con i file di gruppo.
+    """
+    optimizer = {"name": best_params["optimizer"],
+                 "lr": best_params["lr"],
+                 "weight_decay": best_params["weight_decay"]}
+    if best_params["optimizer"] == "adam":
+        optimizer["betas"] = [0.9, 0.999]
+    else:
+        optimizer["momentum"] = 0.9
+        optimizer["nesterov"] = False
+
+    tuned = {
+        "batch_size": best_params["batch_size"],
+        "model": {"name": "tuned_lstm",
+                  "hidden_size": best_params["hidden_size"],
+                  "num_layers": best_params["num_layers"],
+                  "dropout": best_params["dropout"]},
+        "optimizer": optimizer,
+    }
+
+    tuned_dir = Path(ROOT_DIR) / "src/scripts/hyperparams/tuned"
+    tuned_dir.mkdir(exist_ok=True)
+    with open(tuned_dir / "best.yaml", "w") as f:
+        f.write("# @package _global_\n")
+        f.write("# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.\n")
+        yaml.safe_dump(tuned, f, default_flow_style=False, sort_keys=False)
+    return tuned_dir / "best.yaml"
 
 
 @hydra.main(config_path="hyperparams", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
     device = get_device()
+    dataset_path = Path(cfg.data_dir) / cfg.dataset.path
+    columns = list(cfg.features.columns)
+
+    total_dataset = TimeSeriesDataset(dataset_path)
+    folds, dev_index, test_index = make_splits(len(total_dataset),
+                                               n_folds=cfg.split.n_folds,
+                                               test_size=cfg.split.test_size,
+                                               seed=cfg.split.seed)
+    print(f"feature: {columns}")
+    print(f"dev: {len(dev_index)} soggetti in {cfg.split.n_folds} fold | test: {len(test_index)} (non toccato)")
 
     def logging_callback(study, trial):
-        print(f"Trial {trial.number}: Best Value so far = {study.best_value}")
+        print(f"Trial {trial.number} ({trial.state.name}): "
+              f"value = {trial.value if trial.value is not None else float('nan'):.4f} | "
+              f"best so far = {study.best_value:.4f}")
 
     #crea lo studio per massimizzare f1, interrompe usando mediana
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(), pruner=optuna.pruners.MedianPruner())
-    # Esegue l'ottimizzazione su 30 trial
-    study.optimize(lambda trial: objective(trial, cfg, device), n_trials=30, callbacks=[logging_callback])
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=cfg.split.seed),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1),
+    )
+    study.optimize(lambda trial: objective(trial, cfg, dataset_path, columns, folds, device),
+                   n_trials=cfg.n_trials, callbacks=[logging_callback])
 
     print("Best hyperparameters:", study.best_params)
     print("Best F1 Score:", study.best_value)
 
-    best_params = study.best_params #parametri associale al miglior valore di f1
-    best_params['best_f1'] = study.best_value #valore restituito da objective
+    best_params = dict(study.best_params) #parametri associati al miglior valore di f1
+    output = {
+        "protocol": f"{cfg.split.n_folds}-fold CV sul dev set, test set escluso",
+        "features": columns,
+        "n_trials": cfg.n_trials,
+        "epochs_per_fold": cfg.epochs_tuning,
+        "best_params": best_params,
+        "best_mean_f1": study.best_value,
+        "best_fold_f1": study.best_trial.user_attrs.get("fold_f1"),
+        "n_pruned": sum(1 for t in study.trials if t.state == optuna.trial.TrialState.PRUNED),
+    }
 
     # Path assoluto: Hydra puo' essere lanciato da qualunque cartella.
-    output_path = Path(ROOT_DIR) / 'src/scripts/best_params.json'
+    with open(Path(ROOT_DIR) / 'src/scripts/best_params.json', 'w') as f:
+        json.dump(output, f, indent=4)
 
-    with open(output_path, 'w') as f:
-        json.dump(best_params, f, indent=4)
+    written = write_tuned_config(best_params)
+    print(f"Config generata in {written}")
 
 
 if __name__ == "__main__":

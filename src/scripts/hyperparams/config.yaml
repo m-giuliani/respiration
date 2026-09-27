@@ -1,18 +1,41 @@
 defaults:
   - dataset: file_cpet
-  - features: columns_breath
-  - optimizer: adam_tuned
-  - model: tuned_lstm
+  - features: columns_all
+  - optimizer: adam
+  - model: tenet_lstm
   - _self_
+  # Generati da feature_lstm.py e tune_lstm.py. Se non esistono ancora valgono
+  # i default qui sopra, quindi la pipeline parte anche da zero.
+  - optional selected: features
+  - optional tuned: best
 
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${working_dir}/data/
 batch_size: 8
 
-# Impostazioni per il tuning
-epochs_tuning: 5
-# Impostazioni per l'addestramento finale
-epochs_final: 20
+# Suddivisione dei dati: il test set resta fuori da tuning e feature selection
+split:
+  test_size: 0.2
+  n_folds: 5
+  seed: 42
+
+# Ricerca degli iperparametri (tune_lstm.py)
+n_trials: 40
+epochs_tuning: 12
+
+# Addestramento finale (train_lstm.py)
+epochs_final: 40
+patience: 5
+
+# Feature selection (feature_lstm.py): modello baseline uguale per tutti i
+# gruppi, così il confronto misura le feature e non gli iperparametri
+feature_selection:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+  lr: 1.0e-3
+  batch_size: 16
+  epochs: 15
 
 feature_groups:
   respiratory: ['Rf', 'VE/VO2', 'VE/VCO2']

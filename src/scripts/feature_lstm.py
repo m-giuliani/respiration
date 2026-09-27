@@ -1,18 +1,40 @@
-import torch
+"""Seleziona il gruppo di feature migliore in cross validation sul dev set.
+
+Va lanciato prima del tuning: gli iperparametri vanno cercati sul feature set
+che si userà davvero, non su un altro. Per non favorire nessun gruppo, tutti
+vengono confrontati con lo stesso modello baseline definito in config.
+"""
+
 import hydra
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
-import sys
-from pathlib import Path
-from omegaconf import DictConfig
+import torch
+import yaml
+from omegaconf import DictConfig, OmegaConf
 from itertools import combinations
+from pathlib import Path
+import sys
 import os
 import json
 sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
 from config.definitions import ROOT_DIR
+
+from src.splits import make_splits
 from src.threshold_estimator import ThresholdEstimator
-from src.timeseriesdataset import TimeSeriesDataset, collate_fn
-from train_lstm import training_loop, validation_loop, get_device, PAD_LABEL
+from src.timeseriesdataset import TimeSeriesDataset
+from src.training import cross_validate, get_device
+
+
+def generate_combinations(groups):
+    """Tutte le combinazioni non vuote dei gruppi di feature."""
+    combined_groups = {}
+    keys = list(groups.keys())
+    for i in range(1, len(keys) + 1):
+        for combo in combinations(keys, i):
+            group_name = "_".join(combo)
+            group_features = []
+            for key in combo:
+                group_features.extend(groups[key])
+            combined_groups[group_name] = group_features
+    return combined_groups
 
 
 @hydra.main(config_path="hyperparams", config_name="config", version_base='1.3')
@@ -20,81 +42,80 @@ def main(cfg: DictConfig):
 
     device = get_device()
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
+    baseline = cfg.feature_selection
 
-    groups = cfg.feature_groups
-    print("\n\n\n", groups, "\n\n\n")
+    groups = OmegaConf.to_container(cfg.feature_groups)
+    all_groups = generate_combinations(groups)
+    print(f"{len(all_groups)} combinazioni da valutare in {cfg.split.n_folds}-fold CV")
+
+    total_dataset = TimeSeriesDataset(dataset_path)
+    folds, dev_index, test_index = make_splits(len(total_dataset),
+                                               n_folds=cfg.split.n_folds,
+                                               test_size=cfg.split.test_size,
+                                               seed=cfg.split.seed)
+    print(f"dev: {len(dev_index)} soggetti | test: {len(test_index)} (non toccato)")
 
     def evaluate_feature_group(group_name, group_features):
-        print(f"Testing group: {group_name}")
+        def build_model():
+            return ThresholdEstimator(input_size=len(group_features),
+                                      hidden_size=baseline.hidden_size,
+                                      num_layers=baseline.num_layers,
+                                      dropout=baseline.dropout)
 
-        total_dataset = TimeSeriesDataset(dataset_path, columns=group_features)
-        index_tr, index_te = train_test_split(range(len(total_dataset)), random_state=42)
-        train_dataset = TimeSeriesDataset(dataset_path, index_tr, columns=group_features)
-        test_dataset = TimeSeriesDataset(dataset_path, index_te, columns=group_features)
+        def make_optimizer(model):
+            return torch.optim.Adam(model.parameters(), lr=baseline.lr)
 
-        train_dataloader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=collate_fn)
-        test_dataloader = DataLoader(test_dataset, batch_size=cfg.batch_size, shuffle=False, collate_fn=collate_fn)
-
-        model = ThresholdEstimator(input_size=len(group_features),
-                                   hidden_size=cfg.model.hidden_size,
-                                   num_layers=cfg.model.num_layers,
-                                   dropout=cfg.model.dropout).to(device)
-        loss_function = torch.nn.CrossEntropyLoss(ignore_index=PAD_LABEL)
-        optimizer = torch.optim.Adam(model.parameters(), lr=cfg.optimizer.lr)
-
-        best_val_f1 = 0
-        for epoch in range(cfg.epochs_tuning):
-            training_loop(model, train_dataloader, loss_function, optimizer, epoch, device=device)
-            _, val_f1, _, _ = validation_loop(model, test_dataloader, loss_function, epoch, device=device)
-            best_val_f1 = max(best_val_f1, val_f1)
-
-        return best_val_f1
-
-    # Genera combinazioni di feature
-    def generate_combinations(groups):
-        combined_groups = {}
-        keys = list(groups.keys())
-        for i in range(1, len(keys) + 1):
-            for combo in combinations(keys, i):
-                group_name = "_".join(combo)
-                group_features = []
-                for key in combo:
-                    group_features.extend(groups[key])
-                combined_groups[group_name] = group_features
-        return combined_groups
-
-    all_groups = generate_combinations(groups)
-    print("\n\n\n", all_groups, "\n\n\n")
+        fold_scores = cross_validate(dataset_path, group_features, folds,
+                                     build_model, make_optimizer,
+                                     epochs=baseline.epochs,
+                                     batch_size=baseline.batch_size,
+                                     device=device)
+        mean_f1 = sum(fold_scores) / len(fold_scores)
+        spread = max(fold_scores) - min(fold_scores)
+        print(f"  {group_name}: F1 = {mean_f1:.4f} (fold: {[round(s, 3) for s in fold_scores]}, spread {spread:.3f})")
+        return mean_f1, fold_scores
 
     results = {}
     for group_name, group_features in all_groups.items():
-        f1_score = evaluate_feature_group(group_name, group_features)
-        results[group_name] = f1_score
+        print(f"Testing group: {group_name} ({len(group_features)} feature)")
+        mean_f1, fold_scores = evaluate_feature_group(group_name, group_features)
+        results[group_name] = {'mean_f1': mean_f1, 'fold_f1': fold_scores,
+                               'columns': group_features}
 
     # ordina dal migliore
-    sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+    sorted_results = sorted(results.items(), key=lambda x: x[1]['mean_f1'], reverse=True)
     if not sorted_results:
         print("Nessun risultato disponibile. Controlla i dati o la configurazione.")
         return
-    print("\nRisultati ordinati:")
-    for group_name, f1_score in sorted_results:
-        print(f"{group_name}: F1 = {f1_score:.4f}")
 
-    # Path assoluto: Hydra puo' essere lanciato da qualunque cartella.
+    print("\nRisultati ordinati (F1 medio in cross validation):")
+    for group_name, res in sorted_results:
+        print(f"{group_name}: F1 = {res['mean_f1']:.4f}")
+
+    best_name, best = sorted_results[0]
     output_path = Path(ROOT_DIR) / "src/scripts/feature_results.json"
-    results_dict = {
-        "f1_scores": results,
-        "best_group": {
-            "name": sorted_results[0][0],
-            "f1": sorted_results[0][1]
-        }
-    }
-
     with open(output_path, "w") as f:
-        json.dump(results_dict, f, indent=4)
+        json.dump({
+            "protocol": f"{cfg.split.n_folds}-fold CV sul dev set, test set escluso",
+            "baseline_model": OmegaConf.to_container(baseline),
+            "results": {k: v for k, v in sorted_results},
+            "best_group": {"name": best_name, "mean_f1": best['mean_f1'],
+                           "columns": best['columns']},
+        }, f, indent=4)
 
-    best_group = sorted_results[0]
-    print(f"Miglior gruppo: {best_group[0]} con F1 = {best_group[1]:.4f}")
+    # Scrive il gruppo vincente come config Hydra, così il tuning e
+    # l'addestramento lo usano senza doverlo ricopiare a mano.
+    selected_dir = Path(ROOT_DIR) / "src/scripts/hyperparams/selected"
+    selected_dir.mkdir(exist_ok=True)
+    with open(selected_dir / "features.yaml", "w") as f:
+        f.write("# @package _global_\n")
+        f.write("# Generato da feature_lstm.py: gruppo vincente in cross validation.\n")
+        yaml.safe_dump({"features": {"name": f"selected_{best_name}",
+                                     "columns": list(best['columns'])}}, f,
+                       default_flow_style=False, sort_keys=False)
+
+    print(f"\nMiglior gruppo: {best_name} con F1 = {best['mean_f1']:.4f}")
+    print(f"Scritto in {selected_dir / 'features.yaml'}")
 
 
 if __name__ == "__main__":
