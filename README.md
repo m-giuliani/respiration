@@ -346,7 +346,7 @@ is kept out of every selection step and read once.
 - **No comparison against the clinical method.** The real question is not
   whether per-breath F1 is 0.83, it is whether this model lands closer to the
   thresholds than the V-slope and the ventilatory equivalents used today.
-  Without that comparison there is no way to know whether 0.73 is a good result.
+  Without that comparison there is no way to know whether 0.83 is a good result.
 - **The metric is a surrogate.** Nobody cares about classifying individual
   breaths: what matters is by how many seconds or how many watts the estimated
   threshold is off. That error is not measured yet, and it is the metric to add.
