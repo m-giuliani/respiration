@@ -66,7 +66,12 @@ def training_loop(model, dataloader, loss_function, optimizer, epoch, device="cp
     return epoch_loss, f1, precision, recall
 
 
-def validation_loop(model, dataloader, loss_function, epoch, device="cpu", writer=None, split='valid'):
+def collect_predictions(model, dataloader, loss_function, device="cpu"):
+    """Valuta il modello restituendo etichette e predizioni, oltre alla loss.
+
+    Serve sia ai loop di validazione sia alla misura finale sul test set, che
+    ha bisogno delle predizioni grezze per le metriche per classe.
+    """
     model.eval()
     running_loss = 0.0
     all_labels = []
@@ -88,7 +93,11 @@ def validation_loop(model, dataloader, loss_function, epoch, device="cpu", write
             all_labels.extend(targets[mask].cpu().numpy())
             all_preds.extend(preds.argmax(dim=1)[mask].cpu().numpy())
 
-    epoch_loss = running_loss / len(dataloader)
+    return running_loss / len(dataloader), all_labels, all_preds
+
+
+def validation_loop(model, dataloader, loss_function, epoch, device="cpu", writer=None, split='valid'):
+    epoch_loss, all_labels, all_preds = collect_predictions(model, dataloader, loss_function, device)
     precision, recall, f1 = macro_scores(all_labels, all_preds)
     log_epoch(writer, split, epoch, epoch_loss, precision, recall, f1)
     return epoch_loss, f1, precision, recall

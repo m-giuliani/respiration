@@ -144,3 +144,6 @@ outputs/
 
 ## macOS
 .DS_Store
+
+## Checkpoint dei modelli
+checkpoints/

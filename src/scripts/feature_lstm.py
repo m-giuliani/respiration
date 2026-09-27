@@ -103,19 +103,18 @@ def main(cfg: DictConfig):
                            "columns": best['columns']},
         }, f, indent=4)
 
-    # Scrive il gruppo vincente come config Hydra, così il tuning e
-    # l'addestramento lo usano senza doverlo ricopiare a mano.
-    selected_dir = Path(ROOT_DIR) / "src/scripts/hyperparams/selected"
-    selected_dir.mkdir(exist_ok=True)
-    with open(selected_dir / "features.yaml", "w") as f:
-        f.write("# @package _global_\n")
+    # Scrive il gruppo vincente come normale config group di Hydra, così il
+    # tuning e l'addestramento lo usano senza ricopiarlo a mano e una scelta
+    # esplicita da riga di comando (features=columns_all) continua a vincere.
+    out = Path(ROOT_DIR) / "src/scripts/hyperparams/features/selected.yaml"
+    with open(out, "w") as f:
         f.write("# Generato da feature_lstm.py: gruppo vincente in cross validation.\n")
-        yaml.safe_dump({"features": {"name": f"selected_{best_name}",
-                                     "columns": list(best['columns'])}}, f,
+        yaml.safe_dump({"name": f"selected_{best_name}",
+                        "columns": list(best['columns'])}, f,
                        default_flow_style=False, sort_keys=False)
 
     print(f"\nMiglior gruppo: {best_name} con F1 = {best['mean_f1']:.4f}")
-    print(f"Scritto in {selected_dir / 'features.yaml'}")
+    print(f"Scritto in {out}")
 
 
 if __name__ == "__main__":

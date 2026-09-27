@@ -65,39 +65,44 @@ def objective(trial, cfg, dataset_path, columns, folds, device):
 
 
 def write_tuned_config(best_params):
-    """Scrive gli iperparametri vincenti come config Hydra.
+    """Scrive gli iperparametri vincenti come normali config group di Hydra.
 
-    Ricopiarli a mano in config.yaml è il passaggio che in passato ha prodotto
-    override inline incoerenti con i file di gruppo.
+    Group e non override globali: così `model=tenet_lstm` o `optimizer=sgd`
+    da riga di comando vincono, come in qualunque progetto Hydra. Ricopiarli a
+    mano in config.yaml e' il passaggio che in passato ha prodotto override
+    inline incoerenti con i file di gruppo.
     """
     optimizer = {"name": best_params["optimizer"],
                  "lr": best_params["lr"],
-                 "weight_decay": best_params["weight_decay"]}
+                 "weight_decay": best_params["weight_decay"],
+                 # batch_size sta nel gruppo optimizer perche' e' un
+                 # iperparametro di ottimizzazione come gli altri, e perche'
+                 # altrimenti il valore trovato dal tuning non avrebbe un posto
+                 # dove essere scritto.
+                 "batch_size": best_params["batch_size"]}
     if best_params["optimizer"] == "adam":
         optimizer["betas"] = [0.9, 0.999]
     else:
         optimizer["momentum"] = 0.9
         optimizer["nesterov"] = False
 
-    tuned = {
-        "batch_size": best_params["batch_size"],
-        "model": {"name": "tuned_lstm",
-                  "hidden_size": best_params["hidden_size"],
-                  "num_layers": best_params["num_layers"],
-                  # dropout viene suggerito solo con piu' di un layer: con un
-                  # layer solo nn.LSTM lo ignorerebbe e avvisa. Quindi la chiave
-                  # puo' non esserci tra i best_params.
-                  "dropout": best_params.get("dropout", 0.0)},
-        "optimizer": optimizer,
-    }
+    model = {"name": "tuned_lstm",
+             "hidden_size": best_params["hidden_size"],
+             "num_layers": best_params["num_layers"],
+             # dropout viene suggerito solo con piu' di un layer: con un layer
+             # solo nn.LSTM lo ignorerebbe e avvisa, quindi la chiave puo' non
+             # esserci tra i best_params.
+             "dropout": best_params.get("dropout", 0.0)}
 
-    tuned_dir = Path(ROOT_DIR) / "src/scripts/hyperparams/tuned"
-    tuned_dir.mkdir(exist_ok=True)
-    with open(tuned_dir / "best.yaml", "w") as f:
-        f.write("# @package _global_\n")
-        f.write("# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.\n")
-        yaml.safe_dump(tuned, f, default_flow_style=False, sort_keys=False)
-    return tuned_dir / "best.yaml"
+    base = Path(ROOT_DIR) / "src/scripts/hyperparams"
+    written = []
+    for group, payload in (("model", model), ("optimizer", optimizer)):
+        path = base / group / "tuned.yaml"
+        with open(path, "w") as f:
+            f.write("# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.\n")
+            yaml.safe_dump(payload, f, default_flow_style=False, sort_keys=False)
+        written.append(path)
+    return written
 
 
 @hydra.main(config_path="hyperparams", config_name="config", version_base="1.3")
@@ -149,8 +154,8 @@ def main(cfg: DictConfig):
     with open(Path(ROOT_DIR) / 'src/scripts/best_params.json', 'w') as f:
         json.dump(output, f, indent=4)
 
-    written = write_tuned_config(best_params)
-    print(f"Config generata in {written}")
+    for path in write_tuned_config(best_params):
+        print(f"Config generata in {path}")
 
 
 if __name__ == "__main__":

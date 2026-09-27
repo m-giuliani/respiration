@@ -1,17 +1,16 @@
 defaults:
+  # features/selected.yaml lo scrive feature_lstm.py, model|optimizer/tuned.yaml
+  # li scrive tune_lstm.py. Sono normali config group e stanno nel repo, quindi
+  # una scelta esplicita da riga di comando (model=tenet_lstm, optimizer=sgd,
+  # features=columns_all) vince su di loro.
   - dataset: file_cpet
-  - features: columns_all
-  - optimizer: adam
-  - model: tenet_lstm
+  - features: selected
+  - optimizer: tuned
+  - model: tuned
   - _self_
-  # Generati da feature_lstm.py e tune_lstm.py. Se non esistono ancora valgono
-  # i default qui sopra, quindi la pipeline parte anche da zero.
-  - optional selected: features
-  - optional tuned: best
 
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${working_dir}/data/
-batch_size: 8
 
 # Suddivisione dei dati: il test set resta fuori da tuning e feature selection
 split:

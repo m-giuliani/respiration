@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.curdir).split('respirazione')[0] + 'respirazione')
 
 from config.definitions import ROOT_DIR
 from pathlib import Path

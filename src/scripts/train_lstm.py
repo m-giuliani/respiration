@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import json
 import os
+from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 from copy import deepcopy
 from pathlib import Path
 from tqdm import tqdm
@@ -16,10 +17,13 @@ from datetime import datetime
 from src.splits import make_splits
 from src.threshold_estimator import ThresholdEstimator
 from src.timeseriesdataset import TimeSeriesDataset
-from src.training import (PAD_LABEL, build_optimizer, get_device, make_dataloader,
-                          training_loop, validation_loop)
+from src.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
+                          macro_scores, make_dataloader, training_loop, validation_loop)
 
 torch.manual_seed(42)
+
+NUM_CLASSES = 3
+CLASS_NAMES = {0: 'sotto AT', 1: 'tra AT e RC', 2: 'sopra RC'}
 
 
 def hparams_for_tensorboard(cfg):
@@ -60,9 +64,9 @@ def main(cfg: DictConfig):
     train_index, val_index = folds[0]
     print(f"train: {len(train_index)} soggetti | validation: {len(val_index)} | test: {len(test_index)}")
 
-    train_dataloader = make_dataloader(dataset_path, train_index, columns, cfg.batch_size, True)
-    val_dataloader = make_dataloader(dataset_path, val_index, columns, cfg.batch_size, False)
-    test_dataloader = make_dataloader(dataset_path, test_index, columns, cfg.batch_size, False)
+    train_dataloader = make_dataloader(dataset_path, train_index, columns, cfg.optimizer.batch_size, True)
+    val_dataloader = make_dataloader(dataset_path, val_index, columns, cfg.optimizer.batch_size, False)
+    test_dataloader = make_dataloader(dataset_path, test_index, columns, cfg.optimizer.batch_size, False)
 
     model = ThresholdEstimator(len(total_dataset.features), hidden_size, num_layers,
                                dropout=cfg.model.dropout).to(device)
@@ -103,11 +107,34 @@ def main(cfg: DictConfig):
         model.load_state_dict(best_model_state)
 
     # Misura finale sul test set, mai usato per scegliere nulla.
-    test_loss, test_f1, test_precision, test_recall = validation_loop(
-        model, test_dataloader, loss_function, best_epoch, device=device, writer=writer, split='test')
+    test_loss, test_labels, test_preds = collect_predictions(
+        model, test_dataloader, loss_function, device)
+    test_precision, test_recall, test_f1 = macro_scores(test_labels, test_preds)
+    writer.add_scalar('Loss/test', test_loss, best_epoch)
+    writer.add_scalar('F1/test', test_f1, best_epoch)
     print(f"\nTest set ({len(test_index)} soggetti, epoca {best_epoch}): "
           f"F1 = {test_f1:.4f} | precision = {test_precision:.4f} | "
           f"recall = {test_recall:.4f} | loss = {test_loss:.4f}")
+
+    # La classe centrale e' la minoritaria: la macro F1 la pesa come le altre,
+    # quindi il dettaglio per classe dice dove il modello sbaglia davvero.
+    labels_order = list(range(NUM_CLASSES))
+    per_class = {
+        'names': CLASS_NAMES,
+        'f1': f1_score(test_labels, test_preds, average=None, labels=labels_order, zero_division=0).tolist(),
+        'precision': precision_score(test_labels, test_preds, average=None, labels=labels_order, zero_division=0).tolist(),
+        'recall': recall_score(test_labels, test_preds, average=None, labels=labels_order, zero_division=0).tolist(),
+        'support': [int((torch.tensor(test_labels) == c).sum()) for c in labels_order],
+    }
+    print("\nDettaglio per classe sul test set:")
+    for c in labels_order:
+        print(f"  {c} ({CLASS_NAMES[c]:11}): F1 {per_class['f1'][c]:.3f} | "
+              f"precision {per_class['precision'][c]:.3f} | recall {per_class['recall'][c]:.3f} | "
+              f"{per_class['support'][c]} campioni")
+    cm = confusion_matrix(test_labels, test_preds, labels=labels_order).tolist()
+    print("matrice di confusione (righe = vero, colonne = predetto):")
+    for c, row in zip(labels_order, cm):
+        print(f"  {CLASS_NAMES[c]:11} {row}")
 
     writer.add_hparams(hparams_for_tensorboard(cfg),
                        {'tr_loss': tr_loss, 'val_loss': val_loss, 'test_loss': test_loss,
@@ -122,16 +149,29 @@ def main(cfg: DictConfig):
         'features': columns,
         'model': OmegaConf.to_container(cfg.model),
         'optimizer': OmegaConf.to_container(cfg.optimizer),
-        'batch_size': cfg.batch_size,
         'best_epoch': best_epoch,
         'validation': {'loss': val_loss, 'f1': val_f1,
                        'precision': val_precision, 'recall': val_recall},
         'test': {'loss': test_loss, 'f1': test_f1,
                  'precision': test_precision, 'recall': test_recall,
-                 'n_subjects': len(test_index)},
+                 'n_subjects': len(test_index),
+                 'per_class': per_class,
+                 'confusion_matrix': cm},
     }
     with open(Path(ROOT_DIR) / 'src/scripts/test_results.json', 'w') as f:
         json.dump(results, f, indent=4)
+
+    # Senza questo l'unico modo di riavere il modello addestrato e' rifare il
+    # training. E' deterministico, ma non e' una scusa per non salvarlo.
+    checkpoint_dir = Path(ROOT_DIR) / 'checkpoints'
+    checkpoint_dir.mkdir(exist_ok=True)
+    checkpoint_path = checkpoint_dir / 'threshold_estimator.pt'
+    torch.save({'model_state_dict': model.state_dict(),
+                'features': columns,
+                'model': OmegaConf.to_container(cfg.model),
+                'best_epoch': best_epoch,
+                'test_f1': test_f1}, checkpoint_path)
+    print(f"\nModello salvato in {checkpoint_path}")
 
 
 if __name__ == '__main__':
