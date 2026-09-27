@@ -1,5 +1,5 @@
 # Generato da feature_lstm.py: gruppo vincente in cross validation.
-name: selected_respiratory_cardiac_metabolic
+name: selected_respiratory_cardiac_metabolic_load
 columns:
 - Rf
 - VE/VO2
@@ -8,3 +8,4 @@ columns:
 - VO2/HR
 - VO2
 - VCO2
+- Load_peak

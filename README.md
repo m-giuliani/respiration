@@ -109,48 +109,66 @@ salvati: `features=columns_all model=tenet_lstm optimizer=adam`.
 15 combinazioni dei quattro gruppi, 5-fold CV, stesso modello baseline per
 tutte così il confronto misura le feature e non gli iperparametri.
 
-| gruppo | F1 medio |
-|---|---|
-| **respiratory + cardiac + metabolic** | **0.7771** |
-| respiratory + metabolic | 0.7626 |
-| respiratory + cardiac + metabolic + load | 0.7435 |
-| metabolic | 0.7431 |
-| cardiac + metabolic + load | 0.7413 |
-| metabolic + load | 0.7360 |
-| respiratory + metabolic + load | 0.7338 |
-| respiratory + load | 0.7247 |
-| cardiac + metabolic | 0.7147 |
-| respiratory + cardiac + load | 0.7037 |
-| load | 0.6877 |
-| cardiac + load | 0.6841 |
-| respiratory + cardiac | 0.6814 |
-| respiratory | 0.5731 |
-| cardiac | 0.5574 |
+| gruppo | F1 medio | n. feature |
+|---|---|---|
+| **respiratory + cardiac + metabolic + load** | **0.7924** | 8 |
+| respiratory + metabolic + load | 0.7898 | 6 |
+| respiratory + metabolic | 0.7861 | 5 |
+| respiratory + cardiac + metabolic | 0.7844 | 7 |
+| cardiac + metabolic + load | 0.7573 | 5 |
+| cardiac + metabolic | 0.7474 | 4 |
+| metabolic | 0.7471 | 2 |
+| metabolic + load | 0.7396 | 3 |
+| respiratory + cardiac + load | 0.7113 | 6 |
+| respiratory + cardiac | 0.7065 | 5 |
+| cardiac + load | 0.6864 | 3 |
+| respiratory + load | 0.6014 | 4 |
+| respiratory | 0.5964 | 3 |
+| cardiac | 0.5500 | 2 |
+| load | 0.5238 | 1 |
 
-Vince `Rf, VE/VO2, VE/VCO2, HR, VO2/HR, VO2, VCO2`: tutto tranne `Load`.
+Il numero più alto è del gruppo completo, ma **i primi quattro sono a pari
+merito**: da 0.7924 a 0.7844 sono 0.008 di scarto, dentro un rumore tra fold
+che su questi dati vale 0.08-0.09. Dire che il gruppo completo batte gli altri
+tre non è supportato dai dati.
 
-**`Load` peggiora il modello**, e in modo sistematico: aggiunto al gruppo
-vincente porta 0.7771 a 0.7435, e il calo si ripete in ogni coppia con e
-senza (`metabolic` 0.7431 → 0.7360, `respiratory_metabolic` 0.7626 → 0.7338).
+Sulla parsimonia: `respiratory + metabolic` fa 0.7861 con cinque feature
+(`Rf, VE/VO2, VE/VCO2, VO2, VCO2`), indistinguibile dal gruppo completo a
+otto. E `metabolic` da solo, cioè **`VO2` e `VCO2` e nient'altro**, fa 0.7471:
+perde 0.045 rispetto a otto feature usandone due. Quasi tutto il segnale sta
+nello scambio dei gas; il resto aggiunge poco.
 
-Il perché però non è ancora stabilito, e ci sono due spiegazioni distinte che
-questi esperimenti non separano:
+Il gruppo `load` **da solo** è il peggiore di tutti (0.5238): la potenza
+erogata rapportata al picco del soggetto, da sola, non basta a collocare le
+soglie.
 
-1. **`Load` descrive il protocollo, non il soggetto.** La potenza erogata è
-   la rampa impostata dall'operatore. Il modello può impararla a memoria e
-   contare i watt invece di guardare la ventilazione, sbagliando su chi ha una
-   rampa diversa.
-2. **`Load` è l'unica feature non normalizzata.** `load_data.py` divide ogni
-   colonna per il suo valore a riposo, ma solo se quel valore è diverso da
-   zero. A riposo la potenza erogata è 0 su **tutti gli 82 file**, quindi la
-   divisione viene sempre saltata: `Load` entra nella rete in watt grezzi
-   (ordine delle centinaia) mentre tutte le altre feature sono rapporti
-   intorno a 1. Un input con quella magnitudine può dominare l'ingresso a
-   prescindere da cosa contenga.
+### `Load`: era la scala, non il contenuto
 
-Per distinguerle basta normalizzare `Load` in un altro modo — sul picco, o
-standardizzandola — e rifare il confronto. Finché non è fatto, la conclusione
-sicura è solo che `Load` **così come è trattata adesso** va tolta.
+`load_data.py` normalizza ogni colonna sul suo valore a riposo, ma solo se
+quel valore è diverso da zero. A riposo la potenza erogata è 0 su **tutti gli
+82 file**, quindi la divisione viene sempre saltata: `Load` entrava nella rete
+in watt grezzi, media 66 e deviazione 76, mentre ogni altra feature è un
+rapporto con media tra 0.96 e 4.55.
+
+`experiment_load.py` misura le tre forme a parità di fold, epoche e modello,
+partendo dalle sette feature fisiologiche:
+
+| variante | F1 medio | scarto |
+|---|---|---|
+| senza `Load` | 0.7844 | — |
+| `Load` grezza (watt) | 0.7677 | −0.0167 |
+| `Load` / picco del soggetto | 0.7924 | +0.0080 |
+| `Load` / 100 (costante) | 0.7847 | +0.0003 |
+
+`Load / 100` ha la **forma identica** ai watt grezzi: stessa informazione,
+solo magnitudine diversa. Il calo sparisce. Quindi il danno era la scala, e
+l'ipotesi che `Load` peggiorasse il modello perché descrive il protocollo
+invece della risposta del soggetto **non è supportata**.
+
+I due scarti positivi stanno dentro il rumore tra fold, quindi la lettura
+corretta è: normalizzata, `Load` non fa danno, e non è chiaro se aggiunga
+qualcosa. Per questo il gruppo `load` in `config.yaml` usa `Load_peak`, e la
+tabella qui sopra è calcolata su quella colonna.
 
 ### Quali iperparametri servono
 
@@ -172,40 +190,55 @@ e insensibile agli iperparametri.
 
 ### Il modello finale
 
-Baseline (vincitore in validazione), early stopping all'epoca 28 con i pesi
-migliori all'epoca 23. Sui **17 soggetti mai visti da nessuna scelta**:
+Configurazione baseline (vincitrice in validazione), otto feature del gruppo
+selezionato, early stopping all'epoca 15 con i pesi migliori all'epoca 10.
+Sui **17 soggetti mai visti da nessuna scelta**:
 
 ```
-macro F1 0.7295    precision 0.7617    recall 0.7202
+macro F1 0.7260    precision 0.7305    recall 0.7224
 ```
 
 | classe | F1 | precision | recall | campioni |
 |---|---|---|---|---|
-| sotto AT | 0.858 | 0.850 | 0.866 | 2764 |
-| **tra AT e RC** | **0.398** | 0.547 | 0.312 | 1597 |
-| sopra RC | 0.933 | 0.888 | 0.982 | 5964 |
+| sotto AT | 0.825 | 0.828 | 0.822 | 2764 |
+| **tra AT e RC** | **0.440** | 0.464 | 0.420 | 1597 |
+| sopra RC | 0.912 | 0.900 | 0.926 | 5964 |
 
 Matrice di confusione (righe = vero, colonne = predetto):
 
 ```
                 predetto
               0     1     2
-vero  0    2393   348    23
-      1     383   499   715
-      2      40    65  5859
+vero  0    2272   489     3
+      1     314   670   613
+      2     157   286  5521
 ```
 
-**Il risultato che conta è il 0.398.** Il modello non riconosce la fascia tra
-AT e RC, cioè esattamente la zona per cui esiste il progetto. Dei 1597
-respiri veri in quella fascia ne azzecca 499: 715 finiscono sopra RC e 383
-sotto AT. La banda viene compressa da entrambi i lati, quindi in pratica il
-modello **stima AT in ritardo e RC in anticipo**. La macro F1 di 0.73 è
-tenuta in piedi dalle due classi facili, che sono tratti lunghi e omogenei
-dove basta seguire l'andamento generale.
+**Il risultato che conta è il 0.440.** Il modello riconosce male la fascia tra
+AT e RC, cioè esattamente la zona per cui esiste il progetto. Dei 1597 respiri
+veri in quella fascia ne azzecca 670: 613 finiscono sopra RC e 314 sotto AT.
+La banda viene compressa da entrambi i lati, quindi in pratica il modello
+**stima AT in ritardo e RC in anticipo**. La macro F1 di 0.73 è tenuta in
+piedi dalle due classi facili, che sono tratti lunghi e omogenei dove basta
+seguire l'andamento generale.
+
+Per confronto, lo stesso modello addestrato sulle sette feature senza carico
+(il gruppo che vinceva prima che `Load` venisse normalizzata) dà macro F1
+0.7295 ma **0.398 sulla fascia centrale**: leggermente meglio in media,
+peggio sulla classe che interessa. Le due macro F1 differiscono di 0.0035 su
+una misura singola a 17 soggetti, quindi quella differenza non significa
+nulla; il divario di 0.042 sulla classe centrale è più sostanzioso ma resta
+una misura sola.
+
+Va dichiarato che il test set è stato letto **due volte**, una per ciascuno
+dei due feature set. Nessuna delle due letture ha influenzato una scelta —
+il gruppo di feature è cambiato perché è cambiata la normalizzazione di
+`Load`, decisa in cross validation — ma due letture sono due letture, e un
+terzo giro andrebbe fatto su dati nuovi.
 
 Le run sono deterministiche: esecuzioni separate danno gli stessi numeri fino
 alla quarta cifra. Il modello addestrato finisce in
-`checkpoints/threshold_estimator.pt` (non versionato: e' rigenerabile).
+`checkpoints/threshold_estimator.pt` (non versionato: è rigenerabile).
 
 ## Limiti, cioè cosa questi numeri non dimostrano
 

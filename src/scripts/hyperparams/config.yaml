@@ -36,11 +36,14 @@ feature_selection:
   batch_size: 16
   epochs: 15
 
+# Il gruppo load usa Load_peak, non Load: in watt grezzi la colonna entra a
+# media 66 dove tutte le altre stanno intorno a 1, e il solo effetto di scala
+# peggiora il modello (vedi experiment_load.py).
 feature_groups:
   respiratory: ['Rf', 'VE/VO2', 'VE/VCO2']
   cardiac: ['HR', 'VO2/HR']
   metabolic: ['VO2', 'VCO2']
-  load: ['Load']
+  load: ['Load_peak']
 
 # Spazio di ricerca di Optuna. I limiti superiori tengono le attivazioni del
 # backward in RAM: sequenze fino a 1090 passi, oltre si va in swap.

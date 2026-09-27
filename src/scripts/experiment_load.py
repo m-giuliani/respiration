@@ -37,24 +37,52 @@ def main(cfg: DictConfig):
     device = get_device()
     dataset_path = Path(cfg.data_dir) / cfg.dataset.path
     baseline = cfg.feature_selection
-    base_columns = list(cfg.features.columns)
+    # La base deve essere priva di qualunque colonna di carico: cfg.features
+    # punta al gruppo vincente, che dopo questo stesso esperimento include
+    # Load_peak, e altrimenti la variante grezza ne aggiungerebbe una seconda.
+    base_columns = [c for c in cfg.features.columns if not c.startswith('Load')]
 
-    varianti = {
+    # In combinazione: la scala di Load conta o no, a parita' di informazione?
+    in_combinazione = {
         'senza Load': base_columns,
         'Load grezza (watt)': base_columns + ['Load'],
         'Load / picco del soggetto': base_columns + ['Load_peak'],
         'Load / 100 (costante)': base_columns + ['Load_scaled'],
     }
+    # Da sola: quanto segnale porta Load di per se'. Load e Load_scaled hanno la
+    # stessa forma e conservano il carico assoluto in watt; Load_peak lo
+    # cancella, perche' porta la rampa di ogni soggetto da 0 a 1.
+    da_sola = {
+        'solo Load grezza': ['Load'],
+        'solo Load / picco': ['Load_peak'],
+        'solo Load / 100': ['Load_scaled'],
+    }
+    varianti = {**in_combinazione, **da_sola}
 
     folds, dev_index, test_index = make_splits(len(TimeSeriesDataset(dataset_path)),
                                                n_folds=cfg.split.n_folds,
                                                test_size=cfg.split.test_size,
                                                seed=cfg.split.seed)
+    print(f"base senza carico: {base_columns}")
     print(f"base: {len(base_columns)} feature | dev {len(dev_index)} soggetti in "
           f"{cfg.split.n_folds} fold | test {len(test_index)} (non toccato)")
     print(f"modello baseline: hidden {baseline.hidden_size}, {baseline.num_layers} layer, "
           f"dropout {baseline.dropout}, lr {baseline.lr}, batch {baseline.batch_size}, "
           f"{baseline.epochs} epoche\n")
+
+    output = Path(ROOT_DIR) / 'src/scripts/load_experiment.json'
+
+    def salva(risultati):
+        # Scrive dopo ogni variante: una run interrotta a metà lascia comunque
+        # i risultati già calcolati invece di buttarli.
+        with open(output, 'w') as f:
+            json.dump({'protocol': f"{cfg.split.n_folds}-fold CV sul dev set, "
+                                   f"{baseline.epochs} epoche per fold, stessi fold e stesso modello",
+                       'baseline_model': OmegaConf.to_container(baseline),
+                       'base_columns': base_columns,
+                       'variants': risultati,
+                       'in_combinazione': [k for k in in_combinazione if k in risultati],
+                       'da_sola': [k for k in da_sola if k in risultati]}, f, indent=4)
 
     risultati = {}
     for nome, columns in varianti.items():
@@ -68,22 +96,19 @@ def main(cfg: DictConfig):
             epochs=baseline.epochs, batch_size=baseline.batch_size, device=device)
         media = sum(scores) / len(scores)
         risultati[nome] = {'columns': columns, 'fold_f1': scores, 'mean_f1': media}
-        print(f"  {nome:28} F1 = {media:.4f}   fold: {[round(s, 3) for s in scores]}")
+        print(f"  {nome:28} F1 = {media:.4f}   fold: {[round(s, 3) for s in scores]}", flush=True)
+        salva(risultati)
 
     riferimento = risultati['senza Load']['mean_f1']
-    print(f"\nscarto rispetto al gruppo senza Load ({riferimento:.4f}):")
-    for nome, r in risultati.items():
+    print(f"\nin combinazione, scarto rispetto al gruppo senza Load ({riferimento:.4f}):")
+    for nome in in_combinazione:
         if nome == 'senza Load':
             continue
-        print(f"  {nome:28} {r['mean_f1'] - riferimento:+.4f}")
+        print(f"  {nome:28} {risultati[nome]['mean_f1'] - riferimento:+.4f}")
+    print("\nda sola:")
+    for nome in da_sola:
+        print(f"  {nome:28} {risultati[nome]['mean_f1']:.4f}")
 
-    output = Path(ROOT_DIR) / 'src/scripts/load_experiment.json'
-    with open(output, 'w') as f:
-        json.dump({'protocol': f"{cfg.split.n_folds}-fold CV sul dev set, "
-                               f"{baseline.epochs} epoche per fold, stessi fold e stesso modello",
-                   'baseline_model': OmegaConf.to_container(baseline),
-                   'base_columns': base_columns,
-                   'variants': risultati}, f, indent=4)
     print(f"\nScritto in {output}")
 
 
