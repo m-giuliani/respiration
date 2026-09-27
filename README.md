@@ -279,6 +279,44 @@ Le run sono deterministiche: esecuzioni separate danno gli stessi numeri fino
 alla quarta cifra. Il modello addestrato finisce in
 `checkpoints/threshold_estimator.pt` (non versionato: è rigenerabile).
 
+## Perché i risultati sono cambiati
+
+I numeri di questo README non sono confrontabili con quelli prodotti prima,
+perché il codice aveva cinque difetti che falsavano l'addestramento e il
+protocollo di valutazione non teneva niente da parte.
+
+**I bug.**
+
+- Mancavano `model.train()` e `model.eval()`: il dropout restava attivo in
+  validazione, quindi metriche rumorose e early stopping deciso su numeri
+  sbagliati.
+- Lo snapshot dei pesi migliori era `model.state_dict()` senza `deepcopy`, cioè
+  riferimenti ai tensori del modello, che le epoche successive sovrascrivevano
+  in place. L'early stopping ricaricava gli ultimi pesi, non i migliori: era
+  inerte.
+- `data.to(device)` non assegnava il risultato, e la validazione non spostava
+  nulla. Su CPU non si nota, su GPU crasha.
+- Adam riceveva solo `lr`: `betas` e `weight_decay` venivano letti dalla config
+  e mai passati, quindi il `weight_decay` trovato dal tuning non veniva
+  applicato. SGD usava momentum e nesterov fissi nel codice invece che dalla
+  config.
+- Il `SummaryWriter` era globale a livello di modulo, e gli script di tuning e
+  feature selection lo importavano: tutti i trial scrivevano sugli stessi tag
+  della stessa run TensorBoard.
+
+A questi si aggiungeva una trappola nelle config: `config.yaml` ridefiniva
+`model` e `optimizer` inline dopo i `defaults`, quindi `optimizer=sgd` da riga
+di comando costruiva comunque Adam. Per questo i risultati del tuning ora
+finiscono in config group generati (`conf/model/tuned.yaml`,
+`conf/optimizer/tuned.yaml`) invece di essere ricopiati a mano.
+
+**Il protocollo.** C'era un solo split, e quello stesso 25% dei soggetti faceva
+da validation per l'early stopping, da criterio per i trial di Optuna e da
+criterio per scegliere il gruppo di feature. Le F1 riportate erano quindi il
+massimo, su epoche e configurazioni, misurato sui dati usati per scegliere: non
+stime di generalizzazione. Ora il 20% dei soggetti è tenuto fuori da ogni
+selezione e letto una volta sola.
+
 ## Limiti, cioè cosa questi numeri non dimostrano
 
 - **Manca il confronto col metodo clinico.** La domanda vera non è se la F1
