@@ -1,5 +1,6 @@
 """Loop di addestramento e valutazione, condivisi da training, tuning e feature selection."""
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -145,8 +146,27 @@ class LengthBucketBatchSampler(Sampler):
         return (len(self.lengths) + self.batch_size - 1) // self.batch_size
 
 
-def make_dataloader(dataset_path, index, columns, batch_size, shuffle, bucket=True):
+def feature_stats(dataset_path, index, columns):
+    """Media e deviazione standard per feature, sui soli soggetti indicati.
+
+    Le feature arrivano alla rete con l'ampiezza che si portano dietro dal
+    rapporto sul riposo, e quelle ampiezze differiscono fino a 18x fra colonne:
+    l'LSTM ha una sola matrice di pesi per tutti gli ingressi, quindi le colonne
+    piu' ampie dominano i gate a parita' di peso. Riportarle tutte a media 0 e
+    deviazione 1 rende il confronto fra feature una questione di contenuto e non
+    di scala.
+    """
     dataset = TimeSeriesDataset(dataset_path, index, columns=columns)
+    valori = np.concatenate([dataset[i][0].numpy() for i in range(len(dataset))])
+    mean = valori.mean(axis=0)
+    std = valori.std(axis=0)
+    # una colonna costante avrebbe deviazione 0: lasciarla invariata
+    std = np.where(std < 1e-8, 1.0, std)
+    return mean.astype(np.float32), std.astype(np.float32)
+
+
+def make_dataloader(dataset_path, index, columns, batch_size, shuffle, bucket=True, stats=None):
+    dataset = TimeSeriesDataset(dataset_path, index, columns=columns, stats=stats)
     if not bucket:
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
     sampler = LengthBucketBatchSampler(dataset.sequence_lengths(), batch_size, shuffle=shuffle)
@@ -154,7 +174,7 @@ def make_dataloader(dataset_path, index, columns, batch_size, shuffle, bucket=Tr
 
 
 def cross_validate(dataset_path, columns, folds, build_model, make_optimizer,
-                   epochs, batch_size, device, on_fold_end=None):
+                   epochs, batch_size, device, on_fold_end=None, standardize=True):
     """Addestra e valuta una configurazione su ogni fold del dev set.
 
     Restituisce la lista degli F1 migliori, uno per fold. on_fold_end viene
@@ -169,8 +189,10 @@ def cross_validate(dataset_path, columns, folds, build_model, make_optimizer,
         # non devono dipendere dall'inizializzazione casuale dei pesi
         torch.manual_seed(42 + fold)
 
-        train_dataloader = make_dataloader(dataset_path, train_index, columns, batch_size, True)
-        val_dataloader = make_dataloader(dataset_path, val_index, columns, batch_size, False)
+        # statistiche dal training di QUESTO fold, non dall'intero dev set
+        stats = feature_stats(dataset_path, train_index, columns) if standardize else None
+        train_dataloader = make_dataloader(dataset_path, train_index, columns, batch_size, True, stats=stats)
+        val_dataloader = make_dataloader(dataset_path, val_index, columns, batch_size, False, stats=stats)
 
         model = build_model().to(device)
         optimizer = make_optimizer(model)

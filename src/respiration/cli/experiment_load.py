@@ -94,7 +94,8 @@ def main(cfg: DictConfig):
                                                        baseline.num_layers,
                                                        dropout=baseline.dropout),
             lambda m: torch.optim.Adam(m.parameters(), lr=baseline.lr),
-            epochs=baseline.epochs, batch_size=baseline.batch_size, device=device)
+            epochs=baseline.epochs, batch_size=baseline.batch_size, device=device,
+            standardize=cfg.standardize)
         media = sum(scores) / len(scores)
         risultati[nome] = {'columns': columns, 'fold_f1': scores, 'mean_f1': media}
         log.info(f"  {nome:28} F1 = {media:.4f}   fold: {[round(s, 3) for s in scores]}")

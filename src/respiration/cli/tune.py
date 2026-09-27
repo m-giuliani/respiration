@@ -60,7 +60,8 @@ def objective(trial, cfg, dataset_path, columns, folds, device):
 
     fold_scores = cross_validate(dataset_path, columns, folds, build_model, make_optimizer,
                                  epochs=cfg.epochs_tuning, batch_size=batch_size,
-                                 device=device, on_fold_end=on_fold_end)
+                                 device=device, on_fold_end=on_fold_end,
+                                 standardize=cfg.standardize)
     trial.set_user_attr("fold_f1", fold_scores)
     return sum(fold_scores) / len(fold_scores)
 

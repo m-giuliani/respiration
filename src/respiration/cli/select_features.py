@@ -70,7 +70,7 @@ def main(cfg: DictConfig):
                                      build_model, make_optimizer,
                                      epochs=baseline.epochs,
                                      batch_size=baseline.batch_size,
-                                     device=device)
+                                     device=device, standardize=cfg.standardize)
         mean_f1 = sum(fold_scores) / len(fold_scores)
         spread = max(fold_scores) - min(fold_scores)
         log.info(f"  {group_name}: F1 = {mean_f1:.4f} (fold: {[round(s, 3) for s in fold_scores]}, spread {spread:.3f})")

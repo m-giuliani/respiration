@@ -15,8 +15,9 @@ from respiration.paths import CHECKPOINT_DIR, RESULTS_DIR
 from respiration.splits import make_splits
 from respiration.models.threshold_estimator import ThresholdEstimator
 from respiration.data.dataset import TimeSeriesDataset
-from respiration.training import (PAD_LABEL, build_optimizer, collect_predictions, get_device,
-                          macro_scores, make_dataloader, training_loop, validation_loop)
+from respiration.training import (PAD_LABEL, build_optimizer, collect_predictions,
+                                  feature_stats, get_device, macro_scores, make_dataloader,
+                                  training_loop, validation_loop)
 
 torch.manual_seed(42)
 
@@ -65,9 +66,17 @@ def main(cfg: DictConfig):
     train_index, val_index = folds[0]
     log.info(f"train: {len(train_index)} soggetti | validation: {len(val_index)} | test: {len(test_index)}")
 
-    train_dataloader = make_dataloader(dataset_path, train_index, columns, cfg.optimizer.batch_size, True)
-    val_dataloader = make_dataloader(dataset_path, val_index, columns, cfg.optimizer.batch_size, False)
-    test_dataloader = make_dataloader(dataset_path, test_index, columns, cfg.optimizer.batch_size, False)
+    # Le statistiche di standardizzazione vengono dai soli soggetti di training e
+    # si applicano invariate a validation e test: il test set non contribuisce
+    # nemmeno alla scala degli ingressi.
+    stats = feature_stats(dataset_path, train_index, columns) if cfg.standardize else None
+    if stats is not None:
+        log.info("standardizzazione attiva: media e deviazione dai %d soggetti di training",
+                 len(train_index))
+    bs = cfg.optimizer.batch_size
+    train_dataloader = make_dataloader(dataset_path, train_index, columns, bs, True, stats=stats)
+    val_dataloader = make_dataloader(dataset_path, val_index, columns, bs, False, stats=stats)
+    test_dataloader = make_dataloader(dataset_path, test_index, columns, bs, False, stats=stats)
 
     model = ThresholdEstimator(len(total_dataset.features), hidden_size, num_layers,
                                dropout=cfg.model.dropout).to(device)
@@ -148,6 +157,7 @@ def main(cfg: DictConfig):
 
     results = {
         'features': columns,
+        'standardize': bool(cfg.standardize),
         'model': OmegaConf.to_container(cfg.model),
         'optimizer': OmegaConf.to_container(cfg.optimizer),
         'best_epoch': best_epoch,

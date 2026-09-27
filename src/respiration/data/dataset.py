@@ -12,7 +12,7 @@ from respiration.data.cpet import load_and_convert
 
 class TimeSeriesDataset(Dataset):
 
-    def __init__(self, data_path, index=None, columns=None):
+    def __init__(self, data_path, index=None, columns=None, stats=None):
         if isinstance(data_path, Path) or isinstance(data_path, str):
             if not os.path.exists(data_path):
                 raise FileNotFoundError(f"Unable to find the data path {data_path}")
@@ -37,12 +37,20 @@ class TimeSeriesDataset(Dataset):
         else:
             self.features = self.df_map[self.df_idx[0]].columns[1:-1]
 
+        # (media, deviazione) per feature, da calcolare SOLO sui soggetti di
+        # training e passare invariate a validation e test: calcolarle su tutto
+        # il dataset infilerebbe informazione del test set negli ingressi.
+        self.stats = stats
+
     def __len__(self):
         return len(self.df_map)
 
     def __getitem__(self, item):
         df = self.df_map[self.file_name(item)]
         features = df.loc[:, self.features].astype(np.float32).to_numpy()
+        if self.stats is not None:
+            mean, std = self.stats
+            features = (features - mean) / std
         labels = df.loc[:, df.columns[-1:]].astype(np.float32).to_numpy()
         return torch.from_numpy(features), torch.from_numpy(labels)
 

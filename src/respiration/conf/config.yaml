@@ -14,6 +14,12 @@ defaults:
 working_dir: ${hydra:runtime.cwd}
 data_dir: ${project_root:}/data
 
+# Standardizzazione delle feature: media 0 e deviazione 1, con le statistiche
+# calcolate sui soli soggetti di training. Le colonne arrivano alla rete con
+# ampiezze che differiscono fino a 18x, e l'LSTM ha una sola matrice di pesi per
+# tutti gli ingressi. standardize=false riproduce il comportamento precedente.
+standardize: true
+
 # Suddivisione dei dati: il test set resta fuori da tuning e feature selection
 split:
   test_size: 0.2
