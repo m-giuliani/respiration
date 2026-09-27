@@ -138,3 +138,9 @@ cmake-build-*/
 # BINARIES
 .pkl
 
+
+## Artefatti delle run
+outputs/
+
+## macOS
+.DS_Store
