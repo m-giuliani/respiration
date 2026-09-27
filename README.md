@@ -1,93 +1,92 @@
 # respirazione
 
-Stima delle soglie ventilatorie da test CPET con una LSTM.
+Estimating ventilatory thresholds from CPET data with an LSTM.
 
-Un test da sforzo cardiopolmonare (CPET) incrementale attraversa due soglie:
-la **soglia anaerobica (AT)** e il **punto di compenso respiratorio (RC)**.
-Individuarle è il lavoro che un medico dello sport fa a mano guardando i
-grafici. Qui il problema è posto come classificazione per singolo respiro:
-data la serie temporale delle variabili respiratorie, etichettare ogni
-istante con la fascia in cui si trova.
+An incremental cardiopulmonary exercise test (CPET) crosses two thresholds: the
+**anaerobic threshold (AT)** and the **respiratory compensation point (RC)**.
+Locating them is work a sports physician does by hand, reading the plots. Here
+the problem is framed as per-breath classification: given the time series of
+respiratory variables, label every instant with the zone it falls in.
 
-| classe | significato | quota dei campioni |
+| class | meaning | share of samples |
 |---|---|---|
-| 0 | sotto AT | 30.1% |
-| 1 | tra AT e RC | 15.5% |
-| 2 | sopra RC | 54.4% |
+| 0 | below AT | 30.1% |
+| 1 | between AT and RC | 15.5% |
+| 2 | above RC | 54.4% |
 
-## I dati
+## The data
 
-82 file Excel in `data/File_CPET/`, uno per soggetto, esportati dal
-metabolimetro. Ogni file ha quattro fogli: `Test` (la serie respiro per
-respiro), `AT` e `RC` (gli istanti delle due soglie, segnati da un operatore),
-`Media Rest` (i valori a riposo, usati per normalizzare).
+82 Excel files in `data/File_CPET/`, one per subject, exported by the metabolic
+cart. Each file has four sheets: `Test` (the breath-by-breath series), `AT` and
+`RC` (the timestamps of the two thresholds, marked by an operator), and
+`Media Rest` (resting values, used for normalisation).
 
-- 43199 respiri in totale
-- sequenze da 80 a 1090 passi, mediana 508
-- ogni file è un soggetto diverso, quindi una sequenza equivale a un soggetto
+- 43199 breaths in total
+- sequences from 80 to 1090 steps, median 508
+- every file is a different subject, so one sequence equals one subject
 
-`resp-prepare-data` li compatta in `data/sequence_dataset.pkl`,
-normalizzando ogni colonna sul rispettivo valore di riposo e ricavando le
-etichette dagli istanti di AT e RC.
+`resp-prepare-data` packs them into `data/sequence_dataset.pkl`, normalising
+each column by its own resting value and deriving the labels from the AT and RC
+timestamps.
 
-## La pipeline
+## The pipeline
 
-Le tre fasi vanno eseguite in quest'ordine, perché ognuna produce la
-configurazione della successiva.
+The three stages must run in this order, because each one produces the
+configuration for the next.
 
 ```
 resp-prepare-data      xlsx -> data/sequence_dataset.pkl
       |
-resp-select-features   confronta i 15 gruppi di feature in 5-fold CV
+resp-select-features   compares the 15 feature groups in 5-fold CV
       |                -> conf/features/selected.yaml
       |                -> results/feature_results.json
-resp-tune              Optuna sul gruppo vincente, 5-fold CV
+resp-tune              Optuna on the winning group, 5-fold CV
       |                -> conf/model/tuned.yaml, conf/optimizer/tuned.yaml
       |                -> results/best_params.json
-resp-train             addestramento finale e misura sul test set
+resp-train             final training and measurement on the test set
                        -> results/test_results.json
                        -> checkpoints/threshold_estimator.pt
 ```
 
-C'è anche `resp-experiment-load`, che non fa parte della pipeline: risponde alla
-domanda sulla scala di `Load` descritta più sotto.
+There is also `resp-experiment-load`, which is not part of the pipeline: it
+answers the question about the scale of `Load` described below.
 
-I file generati sono normali config group di Hydra, versionati nel repo e
-selezionati nei `defaults` di `config.yaml`. Sono scritti dagli script e non
-vanno modificati a mano: ricopiare a mano i risultati del tuning in
-`config.yaml` e' il passaggio che in passato ha prodotto override incoerenti
-con i file di gruppo. Essendo group e non override globali, una scelta
-esplicita da riga di comando continua a vincere su di loro.
+The generated files are ordinary Hydra config groups, versioned in the repo and
+selected in the `defaults` of `config.yaml`. They are written by the scripts and
+should not be edited by hand: copying tuning results into `config.yaml` manually
+is what previously produced inline overrides inconsistent with the group files.
+Because they are groups and not global overrides, an explicit choice on the
+command line still wins over them.
 
-`batch_size` sta nel gruppo `optimizer` insieme a `lr` e `weight_decay`:
-e' un iperparametro di ottimizzazione, e il valore trovato dal tuning ha
-bisogno di un posto dove essere scritto.
+`batch_size` lives in the `optimizer` group alongside `lr` and `weight_decay`:
+it is an optimisation hyperparameter like the others, and the value found by the
+tuner needs somewhere to be written.
 
-### Suddivisione dei dati
+### How the data is split
 
-`src/splits.py` tiene da parte il **20% dei soggetti (17) come test set** e
-divide i 65 rimanenti in 5 fold. Feature selection, ricerca degli
-iperparametri ed early stopping lavorano solo sui fold. Il test set viene
-letto una volta sola, alla fine.
+`src/respirazione/splits.py` holds back **20% of the subjects (17) as a test
+set** and divides the remaining 65 into 5 folds. Feature selection,
+hyperparameter search and early stopping work only on the folds. The test set is
+read once, at the very end.
 
-Questo è necessario, non pedanteria: con 13 soggetti per fold l'F1 oscilla
-fino a 0.16 tra un fold e l'altro. Un singolo split poteva restituire 0.86
-o 0.70 sullo stesso modello a seconda di come cadeva.
+This is necessary, not pedantry: with 13 subjects per fold the F1 swings by up
+to 0.16 from one fold to another. A single split could return 0.86 or 0.70 for
+the same model depending on how it happened to fall.
 
-## Come si lancia
+## Running it
 
-Il progetto è un package installabile: l'installazione editabile mette i comandi
-in PATH e rende gli import indipendenti dalla cartella da cui si lancia.
+The project is an installable package: an editable install puts the commands on
+PATH and makes imports independent of the directory you launch from.
 
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Poi, da qualunque directory:
+Then, from any directory:
 
 ```bash
-resp-prepare-data        # solo se il pickle va rigenerato dagli xlsx
+resp-prepare-data        # only if the pickle needs regenerating from the xlsx
 resp-select-features
 resp-tune
 resp-train
@@ -95,11 +94,11 @@ pytest
 tensorboard --logdir runs
 ```
 
-Oppure con i target del Makefile: `make install`, `make data`, `make features`,
+Or through the Makefile targets: `make install`, `make data`, `make features`,
 `make tune`, `make train`, `make test`, `make all`.
 
-Tutto è configurato in `src/respirazione/conf/config.yaml` e sovrascrivibile da
-riga di comando, come da convenzione Hydra:
+Everything is configured in `src/respirazione/conf/config.yaml` and overridable
+from the command line, following Hydra conventions:
 
 ```bash
 resp-train optimizer=sgd model=tenet_lstm epochs_final=10
@@ -107,22 +106,23 @@ resp-train features=columns_all optimizer.batch_size=8
 resp-tune n_trials=100 search.hidden_max=128
 ```
 
-Per ignorare i risultati salvati e partire dai default:
+To ignore the stored results and start from the defaults:
 `features=columns_all model=tenet_lstm optimizer=adam`.
 
-Le config stanno dentro il package perché Hydra risolve `config_path` come
-modulo: con un'installazione editabile restano comunque file modificabili su
-disco. I percorsi dei dati non dipendono dalla directory corrente ma dal
-resolver `${project_root:}`, registrato in `respirazione/paths.py`.
+The configs live inside the package because Hydra resolves `config_path` as a
+module: with an editable install they are still plain files you can edit on
+disk. Data paths do not depend on the current directory but on the
+`${project_root:}` resolver, registered in `respirazione/paths.py`.
 
-## Risultati
+## Results
 
-### Quali feature servono
+### Which features matter
 
-15 combinazioni dei quattro gruppi, 5-fold CV, stesso modello baseline per
-tutte così il confronto misura le feature e non gli iperparametri.
+15 combinations of the four groups, 5-fold CV, the same baseline model for all
+of them so that the comparison measures the features and not the
+hyperparameters.
 
-| gruppo | F1 medio | n. feature |
+| group | mean F1 | n. features |
 |---|---|---|
 | **respiratory + cardiac + metabolic + load** | **0.7924** | 8 |
 | respiratory + metabolic + load | 0.7898 | 6 |
@@ -140,249 +140,244 @@ tutte così il confronto misura le feature e non gli iperparametri.
 | cardiac | 0.5500 | 2 |
 | load | 0.5238 | 1 |
 
-Il numero più alto è del gruppo completo, ma **i primi quattro sono a pari
-merito**: da 0.7924 a 0.7844 sono 0.008 di scarto, dentro un rumore tra fold
-che su questi dati vale 0.08-0.09. Dire che il gruppo completo batte gli altri
-tre non è supportato dai dati.
+The highest number belongs to the full group, but **the top four are tied**:
+0.7924 down to 0.7844 is a 0.008 spread, inside a fold-to-fold noise worth
+0.08-0.09 on this data. Claiming the full group beats the other three is not
+supported by the numbers.
 
-Sulla parsimonia: `respiratory + metabolic` fa 0.7861 con cinque feature
-(`Rf, VE/VO2, VE/VCO2, VO2, VCO2`), indistinguibile dal gruppo completo a
-otto. E `metabolic` da solo, cioè **`VO2` e `VCO2` e nient'altro**, fa 0.7471:
-perde 0.045 rispetto a otto feature usandone due. Quasi tutto il segnale sta
-nello scambio dei gas; il resto aggiunge poco.
+On parsimony: `respiratory + metabolic` reaches 0.7861 with five features
+(`Rf, VE/VO2, VE/VCO2, VO2, VCO2`), indistinguishable from the full eight. And
+`metabolic` on its own, meaning **`VO2` and `VCO2` and nothing else**, reaches
+0.7471: it gives up 0.045 against eight features while using two. Almost all the
+signal is in gas exchange; the rest adds little.
 
-Il gruppo `load` **da solo** è il peggiore di tutti (0.5238): la potenza
-erogata rapportata al picco del soggetto, da sola, non basta a collocare le
-soglie.
+The `load` group **on its own** is the worst of all (0.5238): power output
+relative to the subject's own peak is not enough, by itself, to place the
+thresholds.
 
-### `Load`, e un problema più grande: la rete segue le scale
+### `Load`, and a bigger problem: the network follows scale
 
-`data/cpet.py` normalizza ogni colonna sul suo valore a riposo, ma solo se
-quel valore è diverso da zero. A riposo la potenza erogata è 0 su **tutti gli
-82 file**, quindi la divisione viene sempre saltata: `Load` entrava nella rete
-in watt grezzi, media 66 e deviazione 76, mentre ogni altra feature è un
-rapporto con media tra 0.96 e 4.55.
+`data/cpet.py` normalises every column by its resting value, but only when that
+value is non-zero. At rest, power output is 0 in **all 82 files**, so the
+division is always skipped: `Load` was entering the network as raw watts, mean
+66 and standard deviation 76, while every other feature is a ratio with a mean
+between 0.96 and 4.55.
 
-`experiment_load.py` misura tre forme della stessa colonna a parità di fold,
-epoche e modello. `Load / 100` è l'esperimento chiave: ha la **forma identica**
-ai watt grezzi, quindi contiene esattamente la stessa informazione, e cambia
-solo la magnitudine.
+`resp-experiment-load` measures three forms of the same column with identical
+folds, epochs and model. `Load / 100` is the key experiment: it has the
+**identical shape** to raw watts, so it carries exactly the same information, and
+only the magnitude changes.
 
-Aggiunta alle sette feature fisiologiche:
+Added to the seven physiological features:
 
-| variante | F1 medio | scarto |
+| variant | mean F1 | delta |
 |---|---|---|
-| senza `Load` | 0.7844 | — |
-| `Load` grezza (watt) | 0.7677 | −0.0167 |
-| `Load` / picco del soggetto | 0.7924 | +0.0080 |
-| `Load` / 100 (costante) | 0.7847 | +0.0003 |
+| without `Load` | 0.7844 | — |
+| raw `Load` (watts) | 0.7677 | −0.0167 |
+| `Load` / subject's peak | 0.7924 | +0.0080 |
+| `Load` / 100 (constant) | 0.7847 | +0.0003 |
 
-Da sola, come unica feature:
+Alone, as the only feature:
 
-| variante | F1 medio | per fold |
+| variant | mean F1 | per fold |
 |---|---|---|
-| `Load` grezza (watt) | 0.6844 | 0.716 0.701 0.699 0.690 0.617 |
-| `Load` / picco del soggetto | 0.5238 | 0.353 0.589 0.580 0.512 0.585 |
-| `Load` / 100 (costante) | 0.4783 | 0.390 0.451 0.627 0.389 0.534 |
+| raw `Load` (watts) | 0.6844 | 0.716 0.701 0.699 0.690 0.617 |
+| `Load` / subject's peak | 0.5238 | 0.353 0.589 0.580 0.512 0.585 |
+| `Load` / 100 (constant) | 0.4783 | 0.390 0.451 0.627 0.389 0.534 |
 
-Due conclusioni, la seconda più importante della prima.
+Two conclusions, the second more important than the first.
 
-**Sul carico.** In combinazione, i watt grezzi peggiorano il modello e la
-stessa colonna riscalata non lo fa: il danno era la scala. Quindi l'ipotesi
-che `Load` peggiorasse il modello perché descrive il protocollo invece della
-risposta del soggetto **non è supportata**. Anzi, da sola la potenza in watt
-assoluti fa 0.6844, più di qualunque altra forma: le soglie cadono a carichi
-assoluti abbastanza riproducibili tra soggetti, e rapportare al picco di
-ciascuno (`Load_peak`) cancella quell'informazione.
+**On power output.** In combination, raw watts hurt the model and the same
+column rescaled does not: the damage was the scale. So the hypothesis that
+`Load` hurt because it describes the protocol rather than the subject's response
+**is not supported**. On the contrary, on its own absolute power in watts scores
+0.6844, better than any other form: the thresholds fall at absolute workloads
+that are reasonably reproducible across subjects, and dividing by each
+subject's peak (`Load_peak`) erases that information.
 
-**Sulla rete.** `Load` grezza e `Load / 100` contengono la stessa
-informazione, e da sole danno 0.6844 contro 0.4783: **0.206 di divario per una
-semplice divisione per 100**, con i fold che non si sovrappongono. Il modello
-non sta rispondendo al contenuto delle feature ma alla loro magnitudine. Il
-pipeline non standardizza niente: ogni colonna finisce nella rete con la scala
-che le capita dal rapporto sul riposo, e quelle scale sono molto diverse fra
-loro (`VO2` ha deviazione 2.44, `VE/VCO2` 0.17).
+**On the network.** Raw `Load` and `Load / 100` carry the same information, and
+on their own they score 0.6844 against 0.4783: **a 0.206 gap for a plain
+division by 100**, with folds that do not overlap. The model is not responding
+to what the features contain but to how large they are. The pipeline
+standardises nothing: each column reaches the network with whatever scale it
+happens to get from the ratio to rest, and those scales differ widely (`VO2` has
+a standard deviation of 2.44, `VE/VCO2` of 0.17).
 
-Questo è un confondente su **tutta** la tabella dei gruppi qui sopra: parte di
-quei confronti misura la fortuna di scala delle colonne, non il loro contenuto
-informativo. Il rimedio è standardizzare tutte le feature sulle statistiche
-del dev set e rifare il confronto. Finché non è fatto, il ranking dei gruppi
-va letto come indicativo.
+This is a confounder across **the whole** group table above: part of those
+comparisons measures the columns' luck of scale rather than their informative
+content. The fix is to standardise all features on dev-set statistics and redo
+the comparison. Until that is done, the group ranking should be read as
+indicative.
 
-### Quali iperparametri servono
+### Which hyperparameters matter
 
-40 trial Optuna (10 potati) sulle sette feature selezionate, 5-fold CV.
-Migliore configurazione trovata: `hidden 151, 1 layer, adam lr 2.09e-3,
-weight decay 4.31e-6, batch 32`.
+40 Optuna trials (10 pruned) on the seven selected features, 5-fold CV. Best
+configuration found: `hidden 151, 1 layer, adam lr 2.09e-3, weight decay
+4.31e-6, batch 32`.
 
-Confrontata a parità di fold ed epoche con il baseline scelto a mano:
+Compared with the hand-picked baseline using identical folds and epochs:
 
-| configurazione | F1 medio | per fold |
+| configuration | mean F1 | per fold |
 |---|---|---|
-| baseline (hidden 128, 2 layer, dropout 0.2, lr 1e-3, batch 16) | **0.7844** | 0.832 0.767 0.824 0.753 0.746 |
-| migliore di Optuna | 0.7792 | 0.807 0.742 0.825 0.759 0.763 |
+| baseline (hidden 128, 2 layers, dropout 0.2, lr 1e-3, batch 16) | **0.7844** | 0.832 0.767 0.824 0.753 0.746 |
+| Optuna's best | 0.7792 | 0.807 0.742 0.825 0.759 0.763 |
 
-**La ricerca non ha trovato niente di meglio.** Lo scarto è 0.005 e le due
-configurazioni si scambiano i fold a vicenda: è rumore. Il problema è
-sensibile alle feature — 0.557 a 0.784 tra il gruppo peggiore e il migliore —
-e insensibile agli iperparametri.
+**The search found nothing better.** The gap is 0.005 and the two
+configurations trade folds with each other: it is noise. The problem is
+sensitive to the features — 0.557 to 0.784 between the worst and the best group
+— and insensitive to the hyperparameters.
 
-### Il modello finale
+### The final model
 
-Configurazione baseline (vincitrice in validazione), otto feature del gruppo
-selezionato, early stopping all'epoca 15 con i pesi migliori all'epoca 10.
-Sui **17 soggetti mai visti da nessuna scelta**:
+Baseline configuration (the validation winner), eight features from the selected
+group, early stopping at epoch 15 with the best weights from epoch 10. On the
+**17 subjects never seen by any selection step**:
 
 ```
 macro F1 0.7260    precision 0.7305    recall 0.7224
 ```
 
-| classe | F1 | precision | recall | campioni |
+| class | F1 | precision | recall | samples |
 |---|---|---|---|---|
-| sotto AT | 0.825 | 0.828 | 0.822 | 2764 |
-| **tra AT e RC** | **0.440** | 0.464 | 0.420 | 1597 |
-| sopra RC | 0.912 | 0.900 | 0.926 | 5964 |
+| below AT | 0.825 | 0.828 | 0.822 | 2764 |
+| **between AT and RC** | **0.440** | 0.464 | 0.420 | 1597 |
+| above RC | 0.912 | 0.900 | 0.926 | 5964 |
 
-Matrice di confusione (righe = vero, colonne = predetto):
+Confusion matrix (rows = true, columns = predicted):
 
 ```
-                predetto
+                predicted
               0     1     2
-vero  0    2272   489     3
+true  0    2272   489     3
       1     314   670   613
       2     157   286  5521
 ```
 
-**Il risultato che conta è il 0.440.** Il modello riconosce male la fascia tra
-AT e RC, cioè esattamente la zona per cui esiste il progetto. Dei 1597 respiri
-veri in quella fascia ne azzecca 670: 613 finiscono sopra RC e 314 sotto AT.
-La banda viene compressa da entrambi i lati, quindi in pratica il modello
-**stima AT in ritardo e RC in anticipo**. La macro F1 di 0.73 è tenuta in
-piedi dalle due classi facili, che sono tratti lunghi e omogenei dove basta
-seguire l'andamento generale.
+**The number that matters is the 0.440.** The model does a poor job on the zone
+between AT and RC, which is exactly the zone the project exists for. Of the 1597
+true breaths in that band it gets 670 right: 613 end up above RC and 314 below
+AT. The band is squeezed from both sides, so in practice the model **places AT
+late and RC early**. The macro F1 of 0.73 is held up by the two easy classes,
+which are long homogeneous stretches where following the overall trend is enough.
 
-Per confronto, lo stesso modello addestrato sulle sette feature senza carico
-(il gruppo che vinceva prima che `Load` venisse normalizzata) dà macro F1
-0.7295 ma **0.398 sulla fascia centrale**: leggermente meglio in media,
-peggio sulla classe che interessa. Le due macro F1 differiscono di 0.0035 su
-una misura singola a 17 soggetti, quindi quella differenza non significa
-nulla; il divario di 0.042 sulla classe centrale è più sostanzioso ma resta
-una misura sola.
+For comparison, the same model trained on the seven features without power
+output (the group that won before `Load` was normalised) gives a macro F1 of
+0.7295 but **0.398 on the middle band**: slightly better on average, worse on
+the class that matters. The two macro F1 values differ by 0.0035 on a single
+measurement over 17 subjects, so that difference means nothing; the 0.042 gap on
+the middle class is more substantial but is still a single measurement.
 
-Va dichiarato che il test set è stato letto **due volte**, una per ciascuno
-dei due feature set. Nessuna delle due letture ha influenzato una scelta —
-il gruppo di feature è cambiato perché è cambiata la normalizzazione di
-`Load`, decisa in cross validation — ma due letture sono due letture, e un
-terzo giro andrebbe fatto su dati nuovi.
+It should be stated that the test set has been read **twice**, once for each of
+the two feature sets. Neither reading influenced a choice — the feature group
+changed because the normalisation of `Load` changed, and that was decided in
+cross validation — but two readings are two readings, and a third round should
+be run on new data.
 
-Le run sono deterministiche: esecuzioni separate danno gli stessi numeri fino
-alla quarta cifra. Il modello addestrato finisce in
-`checkpoints/threshold_estimator.pt` (non versionato: è rigenerabile).
+Runs are deterministic: separate executions give the same numbers to four
+decimal places. The trained model ends up in
+`checkpoints/threshold_estimator.pt` (not versioned: it can be regenerated).
 
-## Perché i risultati sono cambiati
+## Why the results changed
 
-I numeri di questo README non sono confrontabili con quelli prodotti prima,
-perché il codice aveva cinque difetti che falsavano l'addestramento e il
-protocollo di valutazione non teneva niente da parte.
+The numbers in this README are not comparable with those produced earlier,
+because the code had five defects that distorted training and the evaluation
+protocol held nothing back.
 
-**I bug.**
+**The bugs.**
 
-- Mancavano `model.train()` e `model.eval()`: il dropout restava attivo in
-  validazione, quindi metriche rumorose e early stopping deciso su numeri
-  sbagliati.
-- Lo snapshot dei pesi migliori era `model.state_dict()` senza `deepcopy`, cioè
-  riferimenti ai tensori del modello, che le epoche successive sovrascrivevano
-  in place. L'early stopping ricaricava gli ultimi pesi, non i migliori: era
-  inerte.
-- `data.to(device)` non assegnava il risultato, e la validazione non spostava
-  nulla. Su CPU non si nota, su GPU crasha.
-- Adam riceveva solo `lr`: `betas` e `weight_decay` venivano letti dalla config
-  e mai passati, quindi il `weight_decay` trovato dal tuning non veniva
-  applicato. SGD usava momentum e nesterov fissi nel codice invece che dalla
-  config.
-- Il `SummaryWriter` era globale a livello di modulo, e gli script di tuning e
-  feature selection lo importavano: tutti i trial scrivevano sugli stessi tag
-  della stessa run TensorBoard.
+- `model.train()` and `model.eval()` were missing: dropout stayed active during
+  validation, so the metrics were noisy and early stopping decided on wrong
+  numbers.
+- The snapshot of the best weights was `model.state_dict()` without `deepcopy`,
+  i.e. references to the model's tensors, which later epochs overwrote in place.
+  Early stopping reloaded the last weights, not the best ones: it was inert.
+- `data.to(device)` did not assign the result, and validation moved nothing at
+  all. On CPU you don't notice; on GPU it crashes.
+- Adam received only `lr`: `betas` and `weight_decay` were read from the config
+  and never passed, so the `weight_decay` found by the tuner was never applied.
+  SGD used momentum and nesterov hardcoded in the source instead of the config.
+- The `SummaryWriter` was global at module level, and the tuning and feature
+  selection scripts imported it: every trial wrote to the same tags of the same
+  TensorBoard run.
 
-A questi si aggiungeva una trappola nelle config: `config.yaml` ridefiniva
-`model` e `optimizer` inline dopo i `defaults`, quindi `optimizer=sgd` da riga
-di comando costruiva comunque Adam. Per questo i risultati del tuning ora
-finiscono in config group generati (`conf/model/tuned.yaml`,
-`conf/optimizer/tuned.yaml`) invece di essere ricopiati a mano.
+On top of these there was a trap in the configs: `config.yaml` redefined `model`
+and `optimizer` inline after the `defaults`, so `optimizer=sgd` on the command
+line still built Adam. This is why tuning results now land in generated config
+groups (`conf/model/tuned.yaml`, `conf/optimizer/tuned.yaml`) instead of being
+copied by hand.
 
-**Il protocollo.** C'era un solo split, e quello stesso 25% dei soggetti faceva
-da validation per l'early stopping, da criterio per i trial di Optuna e da
-criterio per scegliere il gruppo di feature. Le F1 riportate erano quindi il
-massimo, su epoche e configurazioni, misurato sui dati usati per scegliere: non
-stime di generalizzazione. Ora il 20% dei soggetti è tenuto fuori da ogni
-selezione e letto una volta sola.
+**The protocol.** There was a single split, and that same 25% of subjects served
+as validation for early stopping, as the objective for the Optuna trials, and as
+the criterion for choosing the feature group. The F1 values reported were
+therefore the maximum, over epochs and configurations, measured on the data used
+to make those choices: not estimates of generalisation. Now 20% of the subjects
+is kept out of every selection step and read once.
 
-## Limiti, cioè cosa questi numeri non dimostrano
+## Limits, i.e. what these numbers do not show
 
-- **Manca il confronto col metodo clinico.** La domanda vera non è se la F1
-  per respiro è 0.73, è se questo modello si avvicina alle soglie meglio o
-  peggio del V-slope e degli equivalenti ventilatori che si usano oggi.
-  Senza quel confronto non si sa se 0.73 è un buon risultato.
-- **La metrica è un surrogato.** A nessuno interessa classificare i singoli
-  respiri: interessa di quanti secondi o di quanti watt sbaglia la soglia
-  stimata. Quell'errore non è ancora misurato, ed è la metrica da aggiungere.
-- **Il test set è un campione di 17 soggetti.** L'intervallo di confidenza
-  attorno a 0.7295 è largo. La media in CV (0.784) è più stabile ma è
-  calcolata su dati che hanno partecipato alle scelte.
-- **Le etichette sono di un solo operatore** e sono trattate come verità. Non
-  c'è una stima della variabilità tra operatori, che nella lettura manuale
-  delle soglie non è trascurabile.
-- **Nessuna standardizzazione delle feature**, e il modello è dimostrabilmente
-  sensibile alla scala (0.206 di F1 per una divisione per 100, vedi sopra).
-  Questo confonde in parte tutta la tabella dei gruppi di feature. È la cosa
-  più importante da sistemare.
-- **La normalizzazione salta silenziosamente** le colonne il cui valore di
-  riposo è 0 o mancante (`data/cpet.py`). Su questi dati capita per `Load` su
-  tutti gli 82 file, senza alcun avviso.
-- **`data/*.xlsx`** contiene 8 file fuori da `File_CPET/`, tre dei quali
-  (`Id_10`, `Id_58`, `Id_70`) non sono nel dataset. Non è documentato perché
-  siano esclusi.
+- **No comparison against the clinical method.** The real question is not
+  whether per-breath F1 is 0.73, it is whether this model lands closer to the
+  thresholds than the V-slope and the ventilatory equivalents used today.
+  Without that comparison there is no way to know whether 0.73 is a good result.
+- **The metric is a surrogate.** Nobody cares about classifying individual
+  breaths: what matters is by how many seconds or how many watts the estimated
+  threshold is off. That error is not measured yet, and it is the metric to add.
+- **The test set is a sample of 17 subjects.** The confidence interval around
+  0.7260 is wide. The CV mean (0.784) is more stable but is computed on data
+  that took part in the choices.
+- **The labels come from a single operator** and are treated as ground truth.
+  There is no estimate of inter-operator variability, which is not negligible in
+  manual threshold reading.
+- **No feature standardisation**, and the model is demonstrably sensitive to
+  scale (0.206 of F1 for a division by 100, see above). This partly confounds
+  the whole feature group table. It is the most important thing to fix.
+- **Normalisation is skipped silently** for columns whose resting value is 0 or
+  missing (`data/cpet.py`). On this data that happens for `Load` in all 82
+  files, with no warning.
+- **`data/*.xlsx`** holds 8 files outside `File_CPET/`, three of which
+  (`Id_10`, `Id_58`, `Id_70`) are not in the dataset. Why they are excluded is
+  not documented.
 
-## Struttura
+## Layout
 
 ```
-pyproject.toml              package installabile, dipendenze, entry point
-Makefile                    scorciatoie per l'ordine della pipeline
+pyproject.toml              installable package, dependencies, entry points
+Makefile                    shortcuts for the pipeline order
 src/respirazione/
-  paths.py                  radice del progetto e resolver ${project_root:}
-  splits.py                 test set + fold di cross validation
-  training.py               loop, metriche, cross_validate, batching per lunghezza
+  paths.py                  project root and the ${project_root:} resolver
+  splits.py                 test set + cross validation folds
+  training.py               loops, metrics, cross_validate, length bucketing
   data/
-    cpet.py                 lettura degli xlsx, normalizzazione, etichette
-    dataset.py              Dataset e collate
+    cpet.py                 reading the xlsx, normalisation, labels
+    dataset.py              Dataset and collate
   models/
-    threshold_estimator.py  l'LSTM
+    threshold_estimator.py  the LSTM
   cli/
     prepare_data.py         resp-prepare-data
     select_features.py      resp-select-features
     tune.py                 resp-tune
     train.py                resp-train
     experiment_load.py      resp-experiment-load
-  conf/                     config Hydra (dataset, features, model, optimizer)
-tests/                      dataset, split, batching
-results/                    i json prodotti dalle run
-data/                       xlsx e pickle
-outputs/ runs/ checkpoints/  artefatti delle run (ignorati da git)
+  conf/                     Hydra configs (dataset, features, model, optimizer)
+tests/                      dataset, splits, batching
+results/                    the json files produced by the runs
+data/                       xlsx and pickle
+outputs/ runs/ checkpoints/  run artefacts (git-ignored)
 ```
 
-Le sequenze di lunghezza simile finiscono nello stesso batch
-(`LengthBucketBatchSampler`): con i batch casuali il 40% del calcolo finiva su
-padding, ora il 18%.
+Sequences of similar length end up in the same batch
+(`LengthBucketBatchSampler`): with random batches 40% of the computation went
+into padding, now 18%.
 
-### Da sistemare
+### To fix
 
-- **standardizzare le feature** sulle statistiche del dev set, e rifare il
-  confronto tra gruppi: è la modifica che cambierebbe di più i risultati
-- **misurare l'errore della soglia** in secondi o watt, non solo la F1 per
-  respiro: è la metrica che rende il lavoro leggibile a un medico
-- **confrontare col metodo clinico** (V-slope), altrimenti non si sa se 0.73 sia
-  un buon numero
-- `data/` contiene 8 xlsx fuori da `File_CPET/`, tre dei quali (`Id_10`,
-  `Id_58`, `Id_70`) non sono nel dataset: non è documentato perché
-- `PROJECT_ROOT` in `paths.py` assume un'installazione editabile, che è il modo
-  in cui il progetto va usato ma non l'unico possibile
+- **standardise the features** on dev-set statistics, and redo the group
+  comparison: it is the change that would move the results the most
+- **measure the threshold error** in seconds or watts, not just per-breath F1:
+  it is the metric that makes this work legible to a physician
+- **compare against the clinical method** (V-slope), otherwise there is no
+  telling whether 0.73 is a good number
+- `data/` holds 8 xlsx outside `File_CPET/`, three of which (`Id_10`, `Id_58`,
+  `Id_70`) are not in the dataset: it is not documented why
+- `PROJECT_ROOT` in `paths.py` assumes an editable install, which is how the
+  project is meant to be used but not the only possibility
