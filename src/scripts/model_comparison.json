@@ -1,0 +1,52 @@
+{
+    "protocol": "5-fold CV sul dev set, 15 epoche per fold, stesse feature e stessi fold",
+    "features": [
+        "Rf",
+        "VE/VO2",
+        "VE/VCO2",
+        "HR",
+        "VO2/HR",
+        "VO2",
+        "VCO2"
+    ],
+    "candidates": {
+        "tuned_optuna": {
+            "config": {
+                "hidden_size": 151,
+                "num_layers": 1,
+                "dropout": 0.0,
+                "lr": 0.0020934611757838766,
+                "weight_decay": 4.305732370895641e-06,
+                "batch_size": 32
+            },
+            "fold_f1": [
+                0.8067023035623103,
+                0.7419331156050518,
+                0.8248526001192205,
+                0.75937289171799,
+                0.7633501760827541
+            ],
+            "mean_f1": 0.7792422174174654
+        },
+        "baseline": {
+            "config": {
+                "hidden_size": 128,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "lr": 0.001,
+                "weight_decay": 0.0,
+                "batch_size": 16
+            },
+            "fold_f1": [
+                0.8318618829752856,
+                0.7671512645205586,
+                0.8242269081619006,
+                0.7530452213059323,
+                0.7457350036605633
+            ],
+            "mean_f1": 0.7844040561248481
+        }
+    },
+    "winner": "baseline",
+    "gap": 0.005161838707382738
+}

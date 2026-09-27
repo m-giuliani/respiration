@@ -1,0 +1,15 @@
+# @package _global_
+# Generato da tune_lstm.py: non modificare a mano, viene sovrascritto.
+batch_size: 32
+model:
+  name: tuned_lstm
+  hidden_size: 151
+  num_layers: 1
+  dropout: 0.0
+optimizer:
+  name: adam
+  lr: 0.0020934611757838766
+  weight_decay: 4.305732370895641e-06
+  betas:
+  - 0.9
+  - 0.999

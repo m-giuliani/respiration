@@ -1,0 +1,41 @@
+{
+    "features": [
+        "Rf",
+        "VE/VO2",
+        "VE/VCO2",
+        "HR",
+        "VO2/HR",
+        "VO2",
+        "VCO2"
+    ],
+    "model": {
+        "name": "baseline_lstm",
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.2
+    },
+    "optimizer": {
+        "name": "adam",
+        "lr": 0.001,
+        "betas": [
+            0.9,
+            0.999
+        ],
+        "weight_decay": 0
+    },
+    "batch_size": 16,
+    "best_epoch": 23,
+    "validation": {
+        "loss": 0.28660234808921814,
+        "f1": 0.8144902968355021,
+        "precision": 0.8185040728266536,
+        "recall": 0.8143833139768125
+    },
+    "test": {
+        "loss": 0.32331086695194244,
+        "f1": 0.7294538790733306,
+        "precision": 0.7616890077491001,
+        "recall": 0.7202098235163189,
+        "n_subjects": 17
+    }
+}

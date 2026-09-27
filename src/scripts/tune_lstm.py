@@ -84,7 +84,10 @@ def write_tuned_config(best_params):
         "model": {"name": "tuned_lstm",
                   "hidden_size": best_params["hidden_size"],
                   "num_layers": best_params["num_layers"],
-                  "dropout": best_params["dropout"]},
+                  # dropout viene suggerito solo con piu' di un layer: con un
+                  # layer solo nn.LSTM lo ignorerebbe e avvisa. Quindi la chiave
+                  # puo' non esserci tra i best_params.
+                  "dropout": best_params.get("dropout", 0.0)},
         "optimizer": optimizer,
     }
 

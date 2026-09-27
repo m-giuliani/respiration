@@ -1,10 +1,31 @@
 {
-    "hidden_size": 454,
-    "num_layers": 2,
-    "lr": 0.0023616905639792267,
-    "batch_size": 8,
-    "optimizer": "adam",
-    "dropout": 0.29703774097264446,
-    "weight_decay": 0.0006614343893705291,
-    "best_f1": 0.566717652330674
+    "protocol": "5-fold CV sul dev set, test set escluso",
+    "features": [
+        "Rf",
+        "VE/VO2",
+        "VE/VCO2",
+        "HR",
+        "VO2/HR",
+        "VO2",
+        "VCO2"
+    ],
+    "n_trials": 40,
+    "epochs_per_fold": 12,
+    "best_params": {
+        "hidden_size": 151,
+        "num_layers": 1,
+        "lr": 0.0020934611757838766,
+        "batch_size": 32,
+        "optimizer": "adam",
+        "weight_decay": 4.305732370895641e-06
+    },
+    "best_mean_f1": 0.764145230913428,
+    "best_fold_f1": [
+        0.746011010254611,
+        0.7419331156050518,
+        0.8248526001192205,
+        0.75937289171799,
+        0.7485565368702666
+    ],
+    "n_pruned": 10
 }
