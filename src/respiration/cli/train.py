@@ -179,6 +179,9 @@ def main(cfg: DictConfig):
     checkpoint_path = checkpoint_dir / 'threshold_estimator.pt'
     torch.save({'model_state_dict': model.state_dict(),
                 'features': columns,
+                # senza le statistiche il checkpoint non e' riutilizzabile: gli
+                # ingressi andrebbero standardizzati con numeri diversi
+                'stats': None if stats is None else [stats[0].tolist(), stats[1].tolist()],
                 'model': OmegaConf.to_container(cfg.model),
                 'best_epoch': best_epoch,
                 'test_f1': test_f1}, checkpoint_path)

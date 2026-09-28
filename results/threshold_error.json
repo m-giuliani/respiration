@@ -1,0 +1,390 @@
+{
+    "n_subjects": 17,
+    "features": [
+        "Rf",
+        "VE/VO2",
+        "VE/VCO2",
+        "Load_peak"
+    ],
+    "per_subject": [
+        {
+            "at": {
+                "breaths": -55,
+                "seconds": -112.0,
+                "watts": -20.0,
+                "index_pred": 326,
+                "index_true": 381
+            },
+            "rc": {
+                "breaths": -41,
+                "seconds": -86.0,
+                "watts": -20.0,
+                "index_pred": 397,
+                "index_true": 438
+            },
+            "subject": "Id_01.xlsx"
+        },
+        {
+            "at": {
+                "breaths": -106,
+                "seconds": -219.0,
+                "watts": -90.0,
+                "index_pred": 202,
+                "index_true": 308
+            },
+            "rc": {
+                "breaths": 12,
+                "seconds": 21.0,
+                "watts": 10.0,
+                "index_pred": 320,
+                "index_true": 308
+            },
+            "subject": "Id_05.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 11,
+                "seconds": 110.0,
+                "watts": 70.0,
+                "index_pred": 66,
+                "index_true": 55
+            },
+            "rc": {
+                "breaths": -5,
+                "seconds": -50.0,
+                "watts": 270.0,
+                "index_pred": 82,
+                "index_true": 87
+            },
+            "subject": "Id_12.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 18,
+                "seconds": 40.0,
+                "watts": 10.0,
+                "index_pred": 214,
+                "index_true": 196
+            },
+            "rc": {
+                "breaths": -93,
+                "seconds": -155.0,
+                "watts": -39.0,
+                "index_pred": 323,
+                "index_true": 416
+            },
+            "subject": "Id_14.xlsx"
+        },
+        {
+            "at": {
+                "breaths": -43,
+                "seconds": -86.0,
+                "watts": -21.0,
+                "index_pred": 181,
+                "index_true": 224
+            },
+            "rc": {
+                "breaths": -7,
+                "seconds": -11.0,
+                "watts": -3.0,
+                "index_pred": 289,
+                "index_true": 296
+            },
+            "subject": "Id_20.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 64,
+                "seconds": 135.0,
+                "watts": 9.0,
+                "index_pred": 158,
+                "index_true": 94
+            },
+            "rc": {
+                "breaths": -42,
+                "seconds": -81.0,
+                "watts": -20.0,
+                "index_pred": 189,
+                "index_true": 231
+            },
+            "subject": "Id_24.xlsx"
+        },
+        {
+            "at": {
+                "breaths": -34,
+                "seconds": -92.0,
+                "watts": -10.0,
+                "index_pred": 107,
+                "index_true": 141
+            },
+            "rc": {
+                "breaths": 7,
+                "seconds": 16.0,
+                "watts": 0.0,
+                "index_pred": 203,
+                "index_true": 196
+            },
+            "subject": "Id_30.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 4,
+                "seconds": 9.0,
+                "watts": 2.0,
+                "index_pred": 137,
+                "index_true": 133
+            },
+            "rc": {
+                "breaths": -63,
+                "seconds": -128.0,
+                "watts": -20.0,
+                "index_pred": 161,
+                "index_true": 224
+            },
+            "subject": "Id_32.xlsx"
+        },
+        {
+            "at": {
+                "breaths": -24,
+                "seconds": -73.0,
+                "watts": -6.0,
+                "index_pred": 122,
+                "index_true": 146
+            },
+            "rc": {
+                "breaths": 6,
+                "seconds": 16.0,
+                "watts": 2.0,
+                "index_pred": 172,
+                "index_true": 166
+            },
+            "subject": "Id_33.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 11,
+                "seconds": 33.0,
+                "watts": 8.0,
+                "index_pred": 138,
+                "index_true": 127
+            },
+            "rc": {
+                "breaths": -25,
+                "seconds": -58.0,
+                "watts": -15.0,
+                "index_pred": 181,
+                "index_true": 206
+            },
+            "subject": "Id_35.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 6,
+                "seconds": 13.0,
+                "watts": 3.0,
+                "index_pred": 123,
+                "index_true": 117
+            },
+            "rc": {
+                "breaths": -9,
+                "seconds": -20.0,
+                "watts": -5.0,
+                "index_pred": 175,
+                "index_true": 184
+            },
+            "subject": "Id_37.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 19,
+                "seconds": 35.0,
+                "watts": 8.0,
+                "index_pred": 212,
+                "index_true": 193
+            },
+            "rc": {
+                "breaths": -126,
+                "seconds": -185.0,
+                "watts": -47.0,
+                "index_pred": 283,
+                "index_true": 409
+            },
+            "subject": "Id_47.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 54,
+                "seconds": 200.0,
+                "watts": 33.0,
+                "index_pred": 155,
+                "index_true": 101
+            },
+            "rc": {
+                "breaths": 18,
+                "seconds": 34.0,
+                "watts": 6.0,
+                "index_pred": 240,
+                "index_true": 222
+            },
+            "subject": "Id_51.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 26,
+                "seconds": 70.0,
+                "watts": 17.0,
+                "index_pred": 160,
+                "index_true": 134
+            },
+            "rc": {
+                "breaths": 19,
+                "seconds": 34.0,
+                "watts": 9.0,
+                "index_pred": 234,
+                "index_true": 215
+            },
+            "subject": "Id_55.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 5,
+                "seconds": 13.0,
+                "watts": 4.0,
+                "index_pred": 142,
+                "index_true": 137
+            },
+            "rc": {
+                "breaths": 39,
+                "seconds": 66.0,
+                "watts": 23.0,
+                "index_pred": 256,
+                "index_true": 217
+            },
+            "subject": "Id_72.xlsx"
+        },
+        {
+            "at": {
+                "breaths": 33,
+                "seconds": 83.0,
+                "watts": 14.0,
+                "index_pred": 141,
+                "index_true": 108
+            },
+            "rc": {
+                "breaths": -75,
+                "seconds": -141.0,
+                "watts": -23.0,
+                "index_pred": 206,
+                "index_true": 281
+            },
+            "subject": "Id_73.xlsx"
+        },
+        {
+            "at": {
+                "breaths": -8,
+                "seconds": -26.0,
+                "watts": -10.0,
+                "index_pred": 161,
+                "index_true": 169
+            },
+            "rc": {
+                "breaths": 6,
+                "seconds": 15.0,
+                "watts": 0.0,
+                "index_pred": 271,
+                "index_true": 265
+            },
+            "subject": "Id_79.xlsx"
+        }
+    ],
+    "summary": {
+        "at": {
+            "secondi": {
+                "unita": "secondi",
+                "errore_assoluto_medio": 79.3529411764706,
+                "errore_assoluto_mediano": 73.0,
+                "bias_medio": 7.823529411764706,
+                "bias_mediano": 13.0,
+                "deviazione": 99.34386821666013,
+                "peggiore": 219.0,
+                "entro": {
+                    "15": 0.17647058823529413,
+                    "30": 0.23529411764705882,
+                    "60": 0.4117647058823529
+                }
+            },
+            "watt": {
+                "unita": "watt",
+                "errore_assoluto_medio": 19.705882352941178,
+                "errore_assoluto_mediano": 10.0,
+                "bias_medio": 1.2352941176470589,
+                "bias_mediano": 4.0,
+                "deviazione": 30.643163351841018,
+                "peggiore": 90.0,
+                "entro": {
+                    "10": 0.5882352941176471,
+                    "20": 0.7647058823529411,
+                    "30": 0.8235294117647058
+                }
+            },
+            "respiri": {
+                "unita": "respiri",
+                "errore_assoluto_medio": 30.647058823529413,
+                "errore_assoluto_mediano": 24.0,
+                "bias_medio": -1.1176470588235294,
+                "bias_mediano": 6.0,
+                "deviazione": 40.3410203623487,
+                "peggiore": 106.0,
+                "entro": {
+                    "5": 0.11764705882352941,
+                    "10": 0.23529411764705882,
+                    "20": 0.47058823529411764
+                }
+            }
+        },
+        "rc": {
+            "secondi": {
+                "unita": "secondi",
+                "errore_assoluto_medio": 65.70588235294117,
+                "errore_assoluto_mediano": 50.0,
+                "bias_medio": -41.94117647058823,
+                "bias_mediano": -20.0,
+                "deviazione": 73.88343011578942,
+                "peggiore": 185.0,
+                "entro": {
+                    "15": 0.11764705882352941,
+                    "30": 0.35294117647058826,
+                    "60": 0.5882352941176471
+                }
+            },
+            "watt": {
+                "unita": "watt",
+                "errore_assoluto_medio": 30.11764705882353,
+                "errore_assoluto_mediano": 15.0,
+                "bias_medio": 7.529411764705882,
+                "bias_mediano": -3.0,
+                "deviazione": 67.9118092884474,
+                "peggiore": 270.0,
+                "entro": {
+                    "10": 0.47058823529411764,
+                    "20": 0.7058823529411765,
+                    "30": 0.8235294117647058
+                }
+            },
+            "respiri": {
+                "unita": "respiri",
+                "errore_assoluto_medio": 34.88235294117647,
+                "errore_assoluto_mediano": 19.0,
+                "bias_medio": -22.294117647058822,
+                "bias_mediano": -7.0,
+                "deviazione": 43.63318314402786,
+                "peggiore": 126.0,
+                "entro": {
+                    "5": 0.058823529411764705,
+                    "10": 0.35294117647058826,
+                    "20": 0.5294117647058824
+                }
+            }
+        }
+    }
+}

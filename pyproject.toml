@@ -29,6 +29,7 @@ resp-select-features = "respiration.cli.select_features:main"
 resp-tune = "respiration.cli.tune:main"
 resp-train = "respiration.cli.train:main"
 resp-experiment-load = "respiration.cli.experiment_load:main"
+resp-threshold-error = "respiration.cli.threshold_error:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

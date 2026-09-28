@@ -48,8 +48,9 @@ resp-train             final training and measurement on the test set
                        -> checkpoints/threshold_estimator.pt
 ```
 
-There is also `resp-experiment-load`, which is not part of the pipeline: it
-answers the question about the scale of `Load` described below.
+Two commands sit outside the pipeline: `resp-experiment-load`, which answers the
+question about the scale of `Load` described below, and `resp-threshold-error`,
+which measures how far off the estimated thresholds land in seconds and watts.
 
 The generated files are ordinary Hydra config groups, versioned in the repo and
 selected in the `defaults` of `config.yaml`. They are written by the scripts and
@@ -90,6 +91,7 @@ resp-prepare-data        # only if the pickle needs regenerating from the xlsx
 resp-select-features
 resp-tune
 resp-train
+resp-threshold-error     # errore su AT e RC in secondi e watt
 pytest
 tensorboard --logdir runs
 ```
@@ -299,6 +301,51 @@ Runs are deterministic: separate executions give the same numbers to four
 decimal places. The trained model lands in
 `checkpoints/threshold_estimator.pt` (not versioned: it can be regenerated).
 
+### The metric that matters: threshold error
+
+Per-breath F1 says how many instants are classified correctly. What a CPET
+reader wants is different: by how much the threshold itself is misplaced.
+`resp-threshold-error` answers that. It projects the model's noisy per-breath
+predictions onto the nearest physiologically valid sequence — zeros, then ones,
+then twos — and compares the two resulting transitions with the ones the
+operator marked.
+
+On the 17 test subjects, absolute error (median, with the mean in brackets):
+
+| threshold | seconds | watts | breaths |
+|---|---|---|---|
+| AT | **73 s** (79) | **10 W** (20) | 24 (31) |
+| RC | **50 s** (66) | **15 W** (30) | 19 (35) |
+
+Share of subjects within a tolerance:
+
+| threshold | ≤10 W | ≤20 W | ≤30 W | ≤30 s | ≤60 s |
+|---|---|---|---|---|---|
+| AT | 59% | 76% | 82% | 24% | 41% |
+| RC | 47% | 71% | 82% | 35% | 59% |
+
+**Read the medians, not the means.** One subject lands 270 W off on RC while
+every other sits between −47 and +23, which drags the mean from negative to
+positive. The same happens on AT with a −219 s outlier. Every number above is
+reported both ways for that reason.
+
+**The direction confirms the confusion matrix, in physical units.** The signed
+median error is **+13 s on AT** and **-20 s on RC**: the model places AT late
+and RC early, narrowing the band between them by about 33 seconds. That is
+the same squeeze visible in the confusion matrix, arrived at independently.
+
+**And it resizes the headline number.** A macro F1 of 0.83 reads well, but the
+AT threshold is still misplaced by a median of 73 seconds, and only 24% of
+subjects fall within 30 s. Per-breath accuracy is high because most breaths sit
+far from the transitions, where the zone is obvious; the transitions themselves
+are still poorly located. This is exactly why the surrogate metric needed
+replacing, and why the per-breath numbers above should not be quoted on their
+own.
+
+Whether 10 W on AT is usable remains unanswerable without the comparison
+against the clinical method, and without an estimate of how much two operators
+disagree with each other on the same test.
+
 ## Why the results changed
 
 The numbers in this README are not comparable with those produced earlier,
@@ -347,9 +394,9 @@ is kept out of every selection step and read once.
   whether per-breath F1 is 0.83, it is whether this model lands closer to the
   thresholds than the V-slope and the ventilatory equivalents used today.
   Without that comparison there is no way to know whether 0.83 is a good result.
-- **The metric is a surrogate.** Nobody cares about classifying individual
-  breaths: what matters is by how many seconds or how many watts the estimated
-  threshold is off. That error is not measured yet, and it is the metric to add.
+- **The threshold error is measured but has no reference point.** A median of
+  73 s and 10 W on AT is meaningful only next to what a clinical method and a
+  second operator would produce on the same tests.
 - **The test set is a sample of 17 subjects.** The confidence interval around
   0.8262 is wide, and the set has now been read three times, once per pipeline
   state. The CV mean (0.8127) is more stable but is computed on data that took
@@ -380,6 +427,7 @@ Makefile                    shortcuts for the pipeline order
 src/respiration/
   paths.py                  project root and the ${project_root:} resolver
   splits.py                 test set + cross validation folds
+  thresholds.py             per-breath predictions -> threshold position
   training.py               loops, metrics, cross_validate, length bucketing
   data/
     cpet.py                 reading the xlsx, normalisation, labels
@@ -392,6 +440,7 @@ src/respiration/
     tune.py                 resp-tune
     train.py                resp-train
     experiment_load.py      resp-experiment-load
+    threshold_error.py      resp-threshold-error
   conf/                     Hydra configs (dataset, features, model, optimizer)
 tests/                      dataset, splits, batching
 results/                    the json files produced by the runs
@@ -410,8 +459,6 @@ into padding, now 18%.
 - **redo the hyperparameter search** on standardised inputs: the stored tuned
   configs predate standardisation, and changing the input distribution is exactly
   what can move the optimal learning rate
-- **measure the threshold error** in seconds or watts, not just per-breath F1:
-  it is the metric that makes this work legible to a physician
 - **compare against the clinical method** (V-slope), otherwise there is no
   telling whether 0.83 is a good number
 - `data/` holds 8 xlsx outside `File_CPET/`, three of which (`Id_10`, `Id_58`,
