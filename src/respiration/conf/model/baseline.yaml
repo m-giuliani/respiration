@@ -1,0 +1,6 @@
+# Configurazione baseline: la stessa di feature_selection in config.yaml. E' quella
+# del modello finale riportato nel README (resp-train model=baseline optimizer=baseline).
+name: baseline_lstm
+hidden_size: 128
+num_layers: 2
+dropout: 0.2

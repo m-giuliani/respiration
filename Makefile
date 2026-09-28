@@ -1,5 +1,5 @@
 # Ordine della pipeline: ogni fase produce la configurazione della successiva.
-.PHONY: install data features tune train experiment test all clean
+.PHONY: install data features tune train threshold-error reproduce experiment test all clean
 
 install:
 	pip install -e ".[dev]"
@@ -15,6 +15,14 @@ tune:
 
 train:
 	resp-train
+
+threshold-error:
+	resp-threshold-error
+
+# Il modello finale del README: config baseline, non quelle di resp-tune.
+reproduce:
+	resp-train model=baseline optimizer=baseline
+	resp-threshold-error
 
 experiment:
 	resp-experiment-load

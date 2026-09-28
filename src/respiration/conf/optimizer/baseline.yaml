@@ -1,0 +1,7 @@
+# Configurazione baseline: la stessa di feature_selection in config.yaml. E' quella
+# del modello finale riportato nel README (resp-train model=baseline optimizer=baseline).
+name: adam
+lr: 1.0e-3
+weight_decay: 0
+batch_size: 16
+betas: [0.9, 0.999]

@@ -91,13 +91,13 @@ resp-prepare-data        # only if the pickle needs regenerating from the xlsx
 resp-select-features
 resp-tune
 resp-train
-resp-threshold-error     # errore su AT e RC in secondi e watt
+resp-threshold-error     # AT and RC error in seconds and watts
 pytest
 tensorboard --logdir runs
 ```
 
 Or through the Makefile targets: `make install`, `make data`, `make features`,
-`make tune`, `make train`, `make test`, `make all`.
+`make tune`, `make train`, `make threshold-error`, `make test`, `make all`.
 
 Everything is configured in `src/respiration/conf/config.yaml` and overridable
 from the command line, following Hydra conventions:
@@ -110,6 +110,16 @@ resp-tune n_trials=100 search.hidden_max=128
 
 To ignore the stored results and start from the defaults:
 `features=columns_all model=tenet_lstm optimizer=adam`.
+
+To reproduce the final model and the numbers reported below (the stored tuned
+configs predate standardisation, see *Which hyperparameters matter*):
+
+```bash
+resp-train model=baseline optimizer=baseline
+resp-threshold-error
+```
+
+Or `make reproduce`.
 
 The configs live inside the package because Hydra resolves `config_path` as a
 module: with an editable install they are still plain files you can edit on
@@ -241,12 +251,13 @@ distribution, which is exactly the kind of change that can move the optimal
 learning rate and hidden size, so the search is worth repeating now — this is
 the one place where redoing it is justified. The stored
 `conf/model/tuned.yaml` and `conf/optimizer/tuned.yaml` therefore describe a
-pipeline that no longer exists; the final model above uses the baseline instead.
+pipeline that no longer exists; the final model below uses the baseline instead
+(`conf/model/baseline.yaml`, `conf/optimizer/baseline.yaml`).
 
 ### The final model
 
-Baseline configuration, the four features of the selected group, standardised
-inputs, early stopping at epoch 31 with the best weights from epoch 26. On the
+Baseline configuration (`resp-train model=baseline optimizer=baseline`), the
+four features of the selected group, standardised inputs, early stopping at epoch 31 with the best weights from epoch 26. On the
 **17 subjects never seen by any selection step**:
 
 ```
@@ -442,10 +453,11 @@ src/respiration/
     experiment_load.py      resp-experiment-load
     threshold_error.py      resp-threshold-error
   conf/                     Hydra configs (dataset, features, model, optimizer)
-tests/                      dataset, splits, batching
+tests/                      dataset, splits, batching, standardisation, thresholds
 results/                    the json files produced by the runs
 data/                       xlsx and pickle
-outputs/ runs/ checkpoints/  run artefacts (git-ignored)
+outputs/ runs/ checkpoints/  run artefacts (git-ignored; outputs/ still holds
+                            three 2025 runs committed before the rule)
 ```
 
 Sequences of similar length end up in the same batch
